@@ -24,31 +24,54 @@
                 {{ message|safe }}
             </div>
         {% endif %}
-</body>
-{% if redirect_main %}
-<script>
-    setTimeout(function() {
-        window.location.href = "/";
-    }, 1000);
-</script>
-{% endif %}
-    <form method="post" id="settings-form" autocomplete="off">
+    <form method="post" id="settings-form" autocomplete="off" enctype="multipart/form-data">
             <label for="TAUTULLI_URL">Tautulli URL {% if 'TAUTULLI_URL' in missing %}<span class="missing">(required)</span>{% endif %}</label>
             <input type="text" id="TAUTULLI_URL" name="TAUTULLI_URL" value="{{ settings.TAUTULLI_URL }}" required>
             <span id="tautulli-url-status" class="msg"></span>
 
             <label for="TAUTULLI_API_KEY">Tautulli API Key {% if 'TAUTULLI_API_KEY' in missing %}<span class="missing">(required)</span>{% endif %}</label>
-            <input type="text" id="TAUTULLI_API_KEY" name="TAUTULLI_API_KEY" value="{{ settings.TAUTULLI_API_KEY }}" required>
+            <input type="password" id="TAUTULLI_API_KEY" name="TAUTULLI_API_KEY" value="{{ settings.TAUTULLI_API_KEY }}" required>
             <span id="tautulli-key-status" class="msg"></span>
 
             <label for="GOOGLE_API_KEY">Google Gemini API Key {% if 'GOOGLE_API_KEY' in missing %}<span class="missing">(required)</span>{% endif %}</label>
-            <input type="text" id="GOOGLE_API_KEY" name="GOOGLE_API_KEY" value="{{ settings.GOOGLE_API_KEY }}" required>
+            <input type="password" id="GOOGLE_API_KEY" name="GOOGLE_API_KEY" value="{{ settings.GOOGLE_API_KEY }}" required>
             <span id="gemini-key-status" class="msg"></span>
+
+            <label for="TAUTULLI_DB_PATH">Tautulli DB Path (optional)</label>
+            <input type="text" id="TAUTULLI_DB_PATH" name="TAUTULLI_DB_PATH" value="{{ settings.TAUTULLI_DB_PATH }}" placeholder="e.g. %LOCALAPPDATA%/Tautulli/Tautulli.db">
+            <div class="msg">If not found automatically, you can upload a copy of your Tautulli.db below.</div>
+            <input type="file" id="TAUTULLI_DB_FILE" name="TAUTULLI_DB_FILE" accept=".db,.sqlite,.sqlite3">
 
             <button type="submit" id="save-btn">Save Settings</button>
         </form>
         <a class="back-link" href="/">&larr; Back to Recommendations</a>
     <!-- No live validation: validation will occur on form submit only -->
     </div>
+    {% if redirect_main %}
+    <script>
+        setTimeout(function() {
+            window.location.href = "/";
+        }, 1000);
+    </script>
+    {% endif %}
+    <script>
+        // Mask API keys by default; reveal on focus, re-mask on blur
+        (function() {
+            function secureField(id) {
+                var el = document.getElementById(id);
+                if (!el) return;
+                // Ensure masked by default
+                el.type = 'password';
+                el.addEventListener('focus', function() {
+                    el.type = 'text';
+                });
+                el.addEventListener('blur', function() {
+                    el.type = 'password';
+                });
+            }
+            secureField('TAUTULLI_API_KEY');
+            secureField('GOOGLE_API_KEY');
+        })();
+    </script>
 </body>
 </html>

@@ -159,7 +159,7 @@
 <body>
     <a href="/settings" style="position:absolute;top:60px;left:18px;color:#ffe066;text-decoration:underline;font-size:1.1em;z-index:10;">⚙️ Settings</a>
     <div style="position:absolute;top:110px;left:18px;z-index:10;background:#222;padding:12px 18px;border-radius:8px;box-shadow:0 0 8px #0006;max-width:380px;line-height:1.6;">
-        <div style="font-weight:bold;margin-bottom:6px;">Library Status</div>
+        <div style="font-weight:bold;margin-bottom:6px;">Library Status (API only)</div>
         <div id="library-status" style="margin-left:2px;">
             <div>Movies: 
                 <span id="movie-status">{{ movie_status_only }}</span>
@@ -259,8 +259,8 @@
     <table>
         <tr>
             <th>Type</th>
-            <th>Recommendations (Available in Library)</th>
-            <th>AI Recs Not In Library</th>
+            <th>Recommendations (Available, Unwatched)</th>
+            <th>AI Recs Not In Library (Unwatched)</th>
             <th>AI Top 10 Recommendations</th>
             <th>AI Categories</th>
             <th>Top 3 Watched</th>
@@ -365,17 +365,32 @@
     {% endif %}
     {% if recs %}
     <div id="timing-section" style="width:50%;margin:20px auto;">
-        <div style="margin:10px 0;">
-            <b>Timing (seconds):</b>
-            <ul>
-                <li>User history fetch: {{ recs.debug.timing.user_history|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.user_history is not none else 'N/A' }}</li>
-                <li>Top watched calc: {{ recs.debug.timing.top_watched|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.top_watched is not none else 'N/A' }}</li>
-                <li>Library fetch: {{ recs.debug.timing.library_fetch|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.library_fetch is not none else 'N/A' }}</li>
-                <li>Unwatched filter: {{ recs.debug.timing.unwatched_filter|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.unwatched_filter is not none else 'N/A' }}</li>
-                <li>Gemini call: {{ recs.debug.timing.gemini|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none else 'N/A' }}</li>
-                <li>AI parse: {{ recs.debug.timing.ai_parse|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.ai_parse is not none else 'N/A' }}</li>
-                <li>Fuzzy match: {{ recs.debug.timing.fuzzy_match|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.fuzzy_match is not none else 'N/A' }}</li>
-            </ul>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+            <div style="margin:10px 0;">
+                <b>Timing (seconds):</b>
+                <ul>
+                    <li>User history fetch: {{ recs.debug.timing.user_history|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.user_history is not none else 'N/A' }}</li>
+                    <li>Top watched calc: {{ recs.debug.timing.top_watched|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.top_watched is not none else 'N/A' }}</li>
+                    <li>Library fetch: {{ recs.debug.timing.library_fetch|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.library_fetch is not none else 'N/A' }}</li>
+                    <li>Unwatched filter: {{ recs.debug.timing.unwatched_filter|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.unwatched_filter is not none else 'N/A' }}</li>
+                    <li>Gemini call: {{ recs.debug.timing.gemini|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none else 'N/A' }}</li>
+                    <li>AI parse: {{ recs.debug.timing.ai_parse|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.ai_parse is not none else 'N/A' }}</li>
+                    <li>Fuzzy match: {{ recs.debug.timing.fuzzy_match|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.fuzzy_match is not none else 'N/A' }}</li>
+                </ul>
+            </div>
+            <div style="margin:10px 0;text-align:right;min-width:220px;">
+                <b style="color:#ffe066;">Data Source:</b>
+                <div>
+                    {% if use_tautulli_db %}
+                        Using Tautulli DB
+                        {% if tautulli_db_path %}
+                        <div style="font-size:0.9em;color:#bbb;max-width:260px;word-break:break-all;">{{ tautulli_db_path }}</div>
+                        {% endif %}
+                    {% else %}
+                        Using Tautulli API
+                    {% endif %}
+                </div>
+            </div>
         </div>
     </div>
     {% endif %}
