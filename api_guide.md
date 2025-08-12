@@ -21,7 +21,7 @@ Returns a JSON bundle of AI recommendations, availability in your Plex library (
 ### Example (PowerShell)
 ```powershell
 # Replace the host/port and user_id
-Invoke-RestMethod -Method Get -Uri "http://localhost:5000/recommendations?user_id=123" | ConvertTo-Json -Depth 6
+Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user_id=123" | ConvertTo-Json -Depth 6
 ```
 
 ### Response (200)
@@ -87,7 +87,7 @@ Forces the app to drop the local library cache; the next recommendation call (or
 
 ### Example (PowerShell)
 ```powershell
-Invoke-RestMethod -Method Post -Uri "http://localhost:5000/rebuild_library" | ConvertTo-Json -Depth 6
+Invoke-RestMethod -Method Post -Uri "http://localhost:9658/rebuild_library" | ConvertTo-Json -Depth 6
 ```
 
 ### Response (200)
