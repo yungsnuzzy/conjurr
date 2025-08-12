@@ -22,6 +22,7 @@
     <link rel="preload" as="image" href="/static/load.gif">
     <link rel="preload" as="image" href="/static/load2.gif">
     <link rel="preload" as="image" href="/static/load3.gif">
+    <link rel="preload" as="image" href="/static/libraryload.gif">
     <style>
         #loading-overlay {
             position: fixed;
@@ -91,16 +92,65 @@
 </head>
 <body>
     <a href="/settings" style="position:absolute;top:60px;left:18px;color:#ffe066;text-decoration:underline;font-size:1.1em;z-index:10;">⚙️ Settings</a>
+    <div style="position:absolute;top:110px;left:18px;z-index:10;background:#222;padding:12px 18px;border-radius:8px;box-shadow:0 0 8px #0006;max-width:380px;line-height:1.6;">
+        <div style="font-weight:bold;margin-bottom:6px;">Library Status</div>
+        <div id="library-status" style="margin-left:2px;">
+            <div>Movies: <span id="movie-status">{{ movie_status_only }}</span></div>
+            <div>Shows: <span id="show-status">{{ show_status_only }}</span></div>
+        </div>
+        <form id="rebuild-library-form" style="margin-top:10px;">
+            <button type="submit" style="background:#ffe066;color:#222;border:none;padding:6px 14px;border-radius:4px;font-weight:bold;cursor:pointer;">Rebuild Library DB</button>
+            <span id="rebuild-msg" style="margin-left:10px;color:#66ff99;font-size:0.98em;"></span>
+        </form>
+    </div>
+    <script>
+    document.addEventListener('DOMContentLoaded', function() {
+        var form = document.getElementById('rebuild-library-form');
+        var msg = document.getElementById('rebuild-msg');
+        var statusEl = document.getElementById('library-status');
+        if (form) {
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                msg.textContent = 'Rebuilding...';
+                var btn = form.querySelector('button[type="submit"]');
+                if (btn) { btn.disabled = true; btn.textContent = 'Rebuilding...'; }
+                fetch('/rebuild_library', {method: 'POST'})
+                  .then(r => r.json())
+                  .then(data => {
+                      // Update message and library status immediately
+                      msg.textContent = (data && data.status) ? data.status : 'Rebuild triggered.';
+                      // Update the vertical statuses
+                      var movieSpan = document.getElementById('movie-status');
+                      var showSpan = document.getElementById('show-status');
+                      if (movieSpan) movieSpan.textContent = 'not cached';
+                      if (showSpan) showSpan.textContent = 'not cached';
+                      // Trigger a quick reload so the backend starts fetching and the proper library overlay shows
+                      setTimeout(function() { window.location.reload(); }, 400);
+                  })
+                  .catch(() => { msg.textContent = 'Error rebuilding library.'; if (btn) { btn.disabled = false; btn.textContent = 'Rebuild Library DB'; } });
+            });
+        }
+    });
+    </script>
     <div class="debug-toggle">
         <input type="checkbox" id="toggle-debug" style="width:18px;height:18px;">
         <label for="toggle-debug">Show Debug Info</label>
     </div>
-    <div id="loading-overlay">
+    {% if show_loading %}
+    <div id="loading-overlay" data-library-building="true" style="display: flex;">
+        <div>
+            <img id="loading-gif" src="/static/libraryload.gif" alt="Loading library...">
+            <span>{{ loading_message if loading_message else "Loading library data..." }}</span>
+        </div>
+    </div>
+    {% else %}
+    <div id="loading-overlay" data-library-building="false" style="display: none;">
         <div>
             <img id="loading-gif" src="/static/load.gif" alt="Loading...">
             <span>Loading Zoltarr's wisdom...</span>
         </div>
     </div>
+    {% endif %}
     <div class="zoltarr-banner">
         <img src="/static/genie.png" alt="Genie">
         <span>Zoltarr knows all</span>
@@ -217,6 +267,9 @@
     </div>
 </body>
 <script>
+    // Whether the library is currently being built (from server-side state via data attribute)
+    var overlayEl = document.getElementById('loading-overlay');
+    var libraryBuilding = !!(overlayEl && overlayEl.getAttribute('data-library-building') === 'true');
     // Debug toggle logic
     document.addEventListener('DOMContentLoaded', function() {
         var debugToggle = document.getElementById('toggle-debug');
@@ -234,11 +287,16 @@
         }
     });
     // Randomly select a loading gif
-    function pickLoadingGif() {
+    function pickLoadingGif(forceLibrary) {
+        var img = document.getElementById('loading-gif');
+        if (!img) return;
+        if (forceLibrary || libraryBuilding) {
+            img.src = '/static/libraryload.gif';
+            return;
+        }
         var gifs = ['/static/load.gif', '/static/load2.gif', '/static/load3.gif'];
         var idx = Math.floor(Math.random() * gifs.length);
-        var img = document.getElementById('loading-gif');
-        if (img) img.src = gifs[idx];
+        img.src = gifs[idx];
     }
 
     // Hide loading overlay when page is fully loaded (for initial load)
@@ -249,13 +307,17 @@
         }, 200); // slight delay for smoothness
     });
 
-    // Show loading overlay on form submit and pick a gif
+    // Show loading overlay on form submit and pick an appropriate gif
     document.addEventListener('DOMContentLoaded', function() {
-        pickLoadingGif(); // pick on initial load
+        // Only randomize on initial load if we're NOT in library-building mode
+        if (!libraryBuilding) {
+            pickLoadingGif(false);
+        }
         var form = document.querySelector('form[method="post"]');
         if (form) {
             form.addEventListener('submit', function() {
-                pickLoadingGif(); // pick a new gif on submit
+                // During library build, force the library-specific gif; otherwise randomize
+                pickLoadingGif(libraryBuilding);
                 var overlay = document.getElementById('loading-overlay');
                 if (overlay) overlay.style.display = 'flex';
             });
