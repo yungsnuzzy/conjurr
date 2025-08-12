@@ -9,7 +9,7 @@ TO DO
 
 * Make it functionally standalone, make a release as an EXE or NT service
 
-* Make settings page for Tautulli path and api key, google gemini api key
+* (DONE) Make settings page for Tautulli path and api key, google gemini api key
 
 * Formalize API so a given user can be passed, and the data returned as JSON
 
