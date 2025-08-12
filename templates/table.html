@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta charset="UTF-8">
+    <title>Recommendations Table</title>
+    <style>
+        table { border-collapse: collapse; width: 50%; margin: 20px auto; }
+        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+        th { background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <h2 style="text-align:center">Tautulli User Recommendations</h2>
+    <form method="post" style="text-align:center; margin-bottom:20px;">
+        <label for="user_id">Select User:</label>
+        <select name="user_id" id="user_id">
+            {% for user in users %}
+                <option value="{{ user.user_id }}" {% if selected_user and user.user_id == selected_user.user_id %}selected{% endif %}>{{ user.friendly_name or user.username }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Get Recommendations</button>
+    </form>
+    {% if recs %}
+    <table>
+        <tr>
+            <th>Type</th>
+            <th>Recommendations (Available in Library)</th>
+            <th>AI Top 10 Recommendations</th>
+            <th>Top 3 Watched</th>
+            <th>Most Watched</th>
+        </tr>
+        <tr>
+            <td>Shows</td>
+            <td>{{ recs.shows|join(', ') }}</td>
+            <td>{{ recs.ai_shows|join(', ') }}</td>
+            <td>{{ recs.top_shows|join(', ') }}</td>
+            <td>{% if recs.top_shows %}{{ recs.top_shows[0] }}{% else %}-{% endif %}</td>
+        </tr>
+        <tr>
+            <td>Movies</td>
+            <td>{{ recs.movies|join(', ') }}</td>
+            <td>{{ recs.ai_movies|join(', ') }}</td>
+            <td>{{ recs.top_movies|join(', ') }}</td>
+            <td>{% if recs.top_movies %}{{ recs.top_movies[0] }}{% else %}-{% endif %}</td>
+        </tr>
+    </table>
+    {% endif %}
+    <div style="width:50%;margin:20px auto;">
+        <div style="margin:10px 0;">
+            <b>Timing (seconds):</b>
+            <ul>
+                <li>User history fetch: {{ recs.debug.timing.user_history|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.user_history is not none else 'N/A' }}</li>
+                <li>Top watched calc: {{ recs.debug.timing.top_watched|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.top_watched is not none else 'N/A' }}</li>
+                <li>Library fetch: {{ recs.debug.timing.library_fetch|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.library_fetch is not none else 'N/A' }}</li>
+                <li>Unwatched filter: {{ recs.debug.timing.unwatched_filter|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.unwatched_filter is not none else 'N/A' }}</li>
+                <li>Gemini call: {{ recs.debug.timing.gemini|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none else 'N/A' }}</li>
+                <li>AI parse: {{ recs.debug.timing.ai_parse|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.ai_parse is not none else 'N/A' }}</li>
+                <li>Fuzzy match: {{ recs.debug.timing.fuzzy_match|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.fuzzy_match is not none else 'N/A' }}</li>
+            </ul>
+        </div>
+        {% if recs %}
+            {% if recs.debug.library_shows_full %}
+                <div><b>Library Shows (Full List):</b>
+                    <pre style="white-space:pre-wrap;max-height:400px;overflow:auto;">{{ recs.debug.library_shows_full | tojson(indent=2) }}</pre>
+                </div>
+            {% endif %}
+            {% if recs.debug.library_movies_full %}
+                <div><b>Library Movies (Full List):</b>
+                    <pre style="white-space:pre-wrap;max-height:400px;overflow:auto;">{{ recs.debug.library_movies_full | tojson(indent=2) }}</pre>
+                </div>
+            {% endif %}
+            {% if recs.debug.fuzzy_show_matches %}
+                <div><b>Fuzzy Show Matches:</b>
+                    <pre style="white-space:pre-wrap;max-height:200px;overflow:auto;">{{ recs.debug.fuzzy_show_matches | tojson(indent=2) }}</pre>
+                </div>
+            {% endif %}
+            {% if recs.debug.fuzzy_movie_matches %}
+                <div><b>Fuzzy Movie Matches:</b>
+                    <pre style="white-space:pre-wrap;max-height:200px;overflow:auto;">{{ recs.debug.fuzzy_movie_matches | tojson(indent=2) }}</pre>
+                </div>
+            {% endif %}
+        {% endif %}
+        <h3>Debug Info</h3>
+        {% if debug_info.error %}
+            <div style="color:red;">{{ debug_info.error }}</div>
+        {% endif %}
+        {% if debug_info.note %}
+            <div style="color:orange;">{{ debug_info.note }}</div>
+        {% endif %}
+        {% if recs %}
+            <div>History count: {{ recs.history_count }}</div>
+            <div>Unwatched shows available: {{ recs.debug.unwatched_shows_count }}</div>
+            <div>Unwatched movies available: {{ recs.debug.unwatched_movies_count }}</div>
+            <div>All shows in library: {{ recs.debug.all_shows_count }}</div>
+            <div>All movies in library: {{ recs.debug.all_movies_count }}</div>
+            <div>Watched set count: {{ recs.debug.watched_set_count }}</div>
+            <div>Gemini AI Top 10 Shows: {{ recs.debug.gemini_ai_shows|join(', ') }}</div>
+            <div>Gemini AI Top 10 Movies: {{ recs.debug.gemini_ai_movies|join(', ') }}</div>
+            <div>Gemini AI Shows Available in Library: {{ recs.debug.gemini_ai_shows_available|join(', ') }}</div>
+            <div>Gemini AI Movies Available in Library: {{ recs.debug.gemini_ai_movies_available|join(', ') }}</div>
+            <div>Show section IDs: {{ recs.debug.show_section_ids }}</div>
+            <div>Movie section IDs: {{ recs.debug.movie_section_ids }}</div>
+            <div>Show items found: {{ recs.debug.show_items_found }}</div>
+            <div>Movie items found: {{ recs.debug.movie_items_found }}</div>
+            <div>Raw libraries: <pre style="white-space:pre-wrap;max-height:200px;overflow:auto;">{{ recs.debug.raw_libraries }}</pre></div>
+            {% if recs.debug.get_libraries_error %}
+                <div style="color:red;">get_libraries error: {{ recs.debug.get_libraries_error }}</div>
+            {% endif %}
+            {% if recs.debug.get_library_media_info_errors %}
+                <div style="color:red;">get_library_media_info errors: {{ recs.debug.get_library_media_info_errors }}</div>
+            {% endif %}
+            <div style="margin-top:10px;">
+                <b>Gemini (Google AI Studio) Debug:</b>
+                <div><b>Prompt:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.gemini_prompt }}</pre></div>
+                <div><b>Raw Response:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.gemini_raw_response }}</pre></div>
+                <div><b>Parsed JSON:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.gemini_parsed_json }}</pre></div>
+                {% if recs.debug.gemini_error %}
+                    <div style="color:red;">Gemini error: {{ recs.debug.gemini_error }}</div>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>
