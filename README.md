@@ -12,3 +12,5 @@ TO DO
 * Make settings page for Tautulli path and api key, google gemini api key
 
 * Formalize API so a given user can be passed, and the data returned as JSON
+
+* Movie and show data is currently cached for up to 1 day while the app is running - this should be moved to a local media.db file that gets update once a day/week? maybe a user setting for how often, since it takes a while. 
