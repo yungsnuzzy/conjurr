@@ -42,6 +42,10 @@
             <div class="msg">If not found automatically, you can upload a copy of your Tautulli.db below.</div>
             <input type="file" id="TAUTULLI_DB_FILE" name="TAUTULLI_DB_FILE" accept=".db,.sqlite,.sqlite3">
 
+            <label for="GEMINI_DAILY_QUOTAS">Gemini Daily Quotas (optional)</label>
+            <input type="text" id="GEMINI_DAILY_QUOTAS" name="GEMINI_DAILY_QUOTAS" placeholder='{"gemini-2.0-flash-001": 200}' value="{{ settings.GEMINI_DAILY_QUOTAS }}">
+            <div class="msg">JSON map of model -> daily call quota. Example: {"gemini-2.0-flash-001": 200}</div>
+
             <button type="submit" id="save-btn">Save Settings</button>
         </form>
         <a class="back-link" href="/">&larr; Back to Recommendations</a>

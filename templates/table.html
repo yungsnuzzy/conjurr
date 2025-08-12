@@ -265,7 +265,7 @@
             <th>AI Categories</th>
             <th>Top 3 Watched</th>
             <th>Most Watched</th>
-            <th>Recent (Last 10)</th>
+            <th>Recently Watched</th>
         </tr>
         <tr>
             <td>Shows</td>
@@ -364,8 +364,32 @@
     </table>
     {% endif %}
     {% if recs %}
-    <div id="timing-section" style="width:50%;margin:20px auto;">
+    <div id="timing-section" style="width:60%;margin:20px auto;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
+            <div style="margin:10px 0;min-width:220px;">
+                <b>Gemini:</b>
+                <div>
+                    <div>SDK: {{ recs.debug.genai_sdk if recs and recs.debug else 'N/A' }}</div>
+                    <div>Model: {{ recs.debug.gemini_model_used if recs and recs.debug and recs.debug.gemini_model_used else 'N/A' }}</div>
+                    {% if recs and recs.debug and recs.debug.gemini_usage %}
+                        {% set u = recs.debug.gemini_usage %}
+                        <div style="font-size:0.95em;color:#bbb;">
+                            prompt tokens: {{ u.prompt_token_count if u.prompt_token_count is not none else 'N/A' }},
+                            candidates tokens: {{ u.candidates_token_count if u.candidates_token_count is not none else 'N/A' }},
+                            total: {{ u.total_token_count if u.total_token_count is not none else 'N/A' }}
+                        </div>
+                    {% else %}
+                        <div style="font-size:0.95em;color:#bbb;">usage: N/A</div>
+                    {% endif %}
+                    {% if recs and recs.debug and recs.debug.gemini_usage_today %}
+                        {% set d = recs.debug.gemini_usage_today %}
+                        <div style="font-size:0.95em;color:#bbb;">today: {{ d.calls }} calls, {{ d.total_tokens }} tokens</div>
+                    {% endif %}
+                    {% if recs and recs.debug and recs.debug.gemini_daily_quota %}
+                        <div style="font-size:0.95em;color:#bbb;">quota: {{ recs.debug.gemini_daily_quota }} calls; remaining: {{ recs.debug.gemini_daily_remaining }}</div>
+                    {% endif %}
+                </div>
+            </div>
             <div style="margin:10px 0;">
                 <b>Timing (seconds):</b>
                 <ul>
