@@ -5,13 +5,44 @@
     <meta charset="UTF-8">
     <title>Recommendations Table</title>
     <style>
-        table { border-collapse: collapse; width: 50%; margin: 20px auto; }
-        th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
-        th { background: #f0f0f0; }
+        body {
+            background: #111;
+            color: #f0eaea;
+            font-family: Arial, sans-serif;
+        }
+        .zoltarr-banner {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            display: flex;
+            align-items: center;
+            z-index: 10;
+        }
+        .zoltarr-banner img {
+            width: 48px;
+            height: 48px;
+            margin-right: 10px;
+        }
+        .zoltarr-banner span {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #ffe066;
+            text-shadow: 1px 1px 8px #000, 0 0 8px #ffe066;
+            letter-spacing: 1px;
+        }
+        table { border-collapse: collapse; width: 50%; margin: 20px auto; background: #222; color: #f0eaea; }
+        th, td { border: 1px solid #444; padding: 8px; text-align: left; }
+        th { background: #333; color: #ffe066; }
+        select, button, label { background: #222; color: #ffe066; border: 1px solid #444; }
+        pre { background: #181818; color: #ffe066; }
     </style>
 </head>
 <body>
-    <h2 style="text-align:center">Tautulli User Recommendations</h2>
+    <div class="zoltarr-banner">
+        <img src="/static/genie.png" alt="Genie">
+        <span>Zoltarr knows all</span>
+    </div>
+    <h2 style="text-align:center">History Based User Recommendations</h2>
     <form method="post" style="text-align:center; margin-bottom:20px;">
         <label for="user_id">Select User:</label>
         <select name="user_id" id="user_id">

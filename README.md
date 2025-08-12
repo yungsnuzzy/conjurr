@@ -16,3 +16,5 @@ TO DO
 * Movie and show data is currently cached for up to 1 day while the app is running - this should be moved to a local media.db file that gets update once a day/week? maybe a user setting for how often, since it takes a while. 
 
 * Instead of just "Top 3" movies and shows, maybe we use the top 3 along with the last 3? Last 5? 10? 
+
+* Separate AI recommendations into "Available on Plex" and "Not available yet"
