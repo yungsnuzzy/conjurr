@@ -37,13 +37,23 @@ def db_get_users(db_path: str) -> List[Dict]:
         rec = {}
         idx = 0
         rec['user_id'] = row[idx]; idx += 1
-        # Prefer friendly_name, then username, then email
-        name = None
+        # Map out any available display columns to explicit fields
+        collected = {}
         for c in display_cols:
-            val = row[idx]; idx += 1
-            if not name and val:
-                name = val
-        rec['friendly_name'] = name or str(rec['user_id'])
+            collected[c] = row[idx]
+            idx += 1
+        # Preserve explicit fields when present
+        if 'username' in collected:
+            rec['username'] = collected.get('username')
+        if 'email' in collected:
+            rec['email'] = collected.get('email')
+        # Compute a friendly display name, preferring friendly_name -> username -> email -> user_id
+        friendly = None
+        for key in ('friendly_name', 'username', 'email'):
+            if key in collected and collected.get(key):
+                friendly = collected.get(key)
+                break
+        rec['friendly_name'] = friendly or str(rec['user_id'])
         if is_active_col:
             rec['is_active'] = bool(row[idx])
         else:
