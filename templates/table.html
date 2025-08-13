@@ -251,6 +251,7 @@
         <div class="cta-row">
             <button class="primary-cta" type="submit" {% if not users or users|length == 0 %}disabled{% endif %}>Get Recommendations</button>
         </div>
+        <br>
         {% if not users or users|length == 0 %}
             <div style="color: #ff8888; margin-top: 8px;">No users returned from Tautulli. Check Settings or Tautulli connectivity.</div>
         {% endif %}
@@ -262,7 +263,7 @@
             .poster-card { width: 140px; text-align:center; }
             .poster-card img { width: 100%; height: auto; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
             .poster-title { margin-top:6px; font-size:0.9em; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-            .poster-section-title { color:#ffe066; margin: 10px 0 6px 0; font-weight:bold; text-align:center; }
+            .poster-section-title { color:#ffe066; margin: 10px 0 6px 0; font-weight:bold; text-align:center; font-size:1.35em; }
         </style>
         {% if not tmdb_enabled %}
             <div style="text-align:center;color:#ec1e1e;margin:10px 0 6px 0;">** Add TMDb API key in Settings for content posters **</div>
@@ -292,6 +293,8 @@
     </div>
     {% endif %}
     {% if recs %}
+    <br>
+    <br>
     <table>
         <tr>
             <th>Type</th>
