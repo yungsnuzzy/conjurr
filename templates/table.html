@@ -256,6 +256,42 @@
         {% endif %}
     </form>
     {% if recs %}
+    <div style="width:85%;margin:10px auto 20px auto;">
+        <style>
+            .poster-row { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; justify-content:center; }
+            .poster-card { width: 140px; text-align:center; }
+            .poster-card img { width: 100%; height: auto; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+            .poster-title { margin-top:6px; font-size:0.9em; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+            .poster-section-title { color:#ffe066; margin: 10px 0 6px 0; font-weight:bold; text-align:center; }
+        </style>
+        {% if not tmdb_enabled %}
+            <div style="text-align:center;color:#bbb;margin:10px 0 6px 0;">Add TMDb API key in Settings for content posters</div>
+        {% endif %}
+        {% if recs.show_posters %}
+            <div class="poster-section-title">Shows</div>
+            <div class="poster-row" aria-label="Recommended shows posters">
+                {% for p in recs.show_posters %}
+                    <div class="poster-card" title="{{ p.title }}">
+                        <img src="{{ p.url }}" alt="{{ p.title }} poster">
+                        <div class="poster-title">{{ p.title }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+        {% if recs.movie_posters %}
+            <div class="poster-section-title">Movies</div>
+            <div class="poster-row" aria-label="Recommended movies posters">
+                {% for p in recs.movie_posters %}
+                    <div class="poster-card" title="{{ p.title }}">
+                        <img src="{{ p.url }}" alt="{{ p.title }} poster">
+                        <div class="poster-title">{{ p.title }}</div>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% if recs %}
     <table>
         <tr>
             <th>Type</th>
@@ -400,6 +436,7 @@
                     <li>Gemini call: {{ recs.debug.timing.gemini|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none else 'N/A' }}</li>
                     <li>AI parse: {{ recs.debug.timing.ai_parse|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.ai_parse is not none else 'N/A' }}</li>
                     <li>Fuzzy match: {{ recs.debug.timing.fuzzy_match|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.fuzzy_match is not none else 'N/A' }}</li>
+                    <li>Posters fetch: {{ recs.debug.timing.posters|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.posters is not none else 'N/A' }}</li>
                 </ul>
             </div>
             <div style="margin:10px 0;text-align:right;min-width:220px;">
@@ -414,6 +451,11 @@
                         Using Tautulli API
                     {% endif %}
                 </div>
+                {% if recs and recs.debug and recs.debug.poster_sources %}
+                <div style="margin-top:8px; font-size:0.95em; color:#bbb;">
+                    Posters: {{ recs.debug.poster_sources.summary }}
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

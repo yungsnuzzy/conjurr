@@ -37,6 +37,10 @@
             <input type="password" id="GOOGLE_API_KEY" name="GOOGLE_API_KEY" value="{{ settings.GOOGLE_API_KEY }}" required>
             <span id="gemini-key-status" class="msg"></span>
 
+            <label for="TMDB_API_KEY">TMDb API Key (optional)</label>
+            <input type="password" id="TMDB_API_KEY" name="TMDB_API_KEY" value="{{ settings.TMDB_API_KEY }}" placeholder="Paste your TMDb API key">
+            <div class="msg">Used for high-quality posters. Falls back to Tautulli images if not set.</div>
+
             <label for="TAUTULLI_DB_PATH">Tautulli DB Path (optional)</label>
             <input type="text" id="TAUTULLI_DB_PATH" name="TAUTULLI_DB_PATH" value="{{ settings.TAUTULLI_DB_PATH }}" placeholder="e.g. %LOCALAPPDATA%/Tautulli/Tautulli.db">
             <div class="msg">If not found automatically, you can upload a copy of your Tautulli.db below.</div>
@@ -75,6 +79,7 @@
             }
             secureField('TAUTULLI_API_KEY');
             secureField('GOOGLE_API_KEY');
+            secureField('TMDB_API_KEY');
         })();
     </script>
 </body>
