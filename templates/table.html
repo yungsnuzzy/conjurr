@@ -241,7 +241,7 @@
     <h2 style="text-align:center">History Based User Recommendations</h2>
     <form method="post" style="text-align:center; margin-bottom:20px;">
         {% if user_mode %}
-            <div class="user-row">
+        <div style="width:100%;margin:10px auto 20px auto;display:flex;flex-direction:column;align-items:center;">
                 <label for="user_login">Enter Plex email or username:</label>
                 <input name="user_login" id="user_login" type="text" placeholder="name@example.com or username" style="background:#222;color:#ffe066;border:1px solid #444;padding:8px 10px;border-radius:6px;min-width:280px;" />
             </div>
@@ -250,6 +250,7 @@
             {% endif %}
             <div class="cta-row">
                 <button class="primary-cta" type="submit">Get Recommendations</button>
+                .user-mode-username { color:#ffe066; font-size:2rem; font-weight:700; text-align:center; padding:10px 0 6px; margin:6px 0 4px; text-shadow: 1px 1px 6px #000; }
             </div>
         {% else %}
             <div class="user-row">
@@ -260,6 +261,12 @@
                         <option value="{{ user.user_id }}" {% if selected_user and user.user_id == selected_user.user_id %}selected{% endif %}>{{ user.friendly_name or user.username }}</option>
                     {% endfor %}
                 {% else %}
+            {% if user_mode and selected_user %}
+                {% set user_name = (selected_user.friendly_name or selected_user.username) if selected_user else None %}
+                {% if user_name %}
+                    <div class="user-mode-username">{{ user_name }}</div>
+                {% endif %}
+            {% endif %}
                     <option disabled selected>No users found</option>
                 {% endif %}
                 </select>
