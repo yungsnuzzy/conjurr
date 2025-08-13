@@ -99,7 +99,11 @@
     table { border-collapse: collapse; width: 85%; margin: 20px auto; background: #222; color: #f0eaea; }
     th, td { border: 1px solid #444; padding: 11px; text-align: left; }
         th { background: #333; color: #ffe066; }
-        select, button, label { background: #222; color: #ffe066; border: 1px solid #444; }
+    select, button, label { background: #222; color: #ffe066; border: 1px solid #444; }
+    /* Enlarge user selector label and dropdown items */
+    label[for="user_id"] { font-size: 1.2em; }
+    #user_id { font-size: 1.15em; }
+    #user_id option { font-size: 1.15em; }
         pre { background: #181818; color: #ffe066; }
 
         /* Prominent CTA button for recommendations */
@@ -257,37 +261,43 @@
         {% endif %}
     </form>
     {% if recs %}
-    <div style="width:85%;margin:10px auto 20px auto;">
+    <div style="width:100%;margin:10px auto 20px auto;display:flex;flex-direction:column;align-items:center;">
         <style>
-            .poster-row { display:flex; flex-wrap:wrap; gap:12px; align-items:flex-start; justify-content:center; }
+            .poster-row { display:inline-flex; flex-wrap:wrap; gap:12px; align-items:flex-start; justify-content:center; }
             .poster-card { width: 140px; text-align:center; }
             .poster-card img { width: 100%; height: auto; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
             .poster-title { margin-top:6px; font-size:0.9em; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
             .poster-section-title { color:#ffe066; margin: 10px 0 6px 0; font-weight:bold; text-align:center; font-size:1.35em; }
+            .poster-box { display:inline-block; background:#1a1a1a; border:1px solid #333; border-radius:12px; padding:12px 14px 16px; box-shadow:0 2px 10px rgba(0,0,0,0.35); margin:14px 0; max-width:100%; }
+            .poster-box .poster-section-title { margin: 4px 0 10px 0; }
         </style>
         {% if not tmdb_enabled %}
             <div style="text-align:center;color:#ec1e1e;margin:10px 0 6px 0;">** Add TMDb API key in Settings for content posters **</div>
         {% endif %}
         {% if recs.show_posters %}
-            <div class="poster-section-title">Shows</div>
-            <div class="poster-row" aria-label="Recommended shows posters">
-                {% for p in recs.show_posters %}
-                    <div class="poster-card" title="{{ p.title }}">
-                        <img src="{{ p.url }}" alt="{{ p.title }} poster">
-                        <div class="poster-title">{{ p.title }}</div>
-                    </div>
-                {% endfor %}
+            <div class="poster-box">
+                <div class="poster-section-title">Shows</div>
+                <div class="poster-row" aria-label="Recommended shows posters">
+                    {% for p in recs.show_posters %}
+                        <div class="poster-card" title="{{ p.title }}">
+                            <img src="{{ p.url }}" alt="{{ p.title }} poster">
+                            <div class="poster-title">{{ p.title }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
             </div>
         {% endif %}
         {% if recs.movie_posters %}
-            <div class="poster-section-title">Movies</div>
-            <div class="poster-row" aria-label="Recommended movies posters">
-                {% for p in recs.movie_posters %}
-                    <div class="poster-card" title="{{ p.title }}">
-                        <img src="{{ p.url }}" alt="{{ p.title }} poster">
-                        <div class="poster-title">{{ p.title }}</div>
-                    </div>
-                {% endfor %}
+            <div class="poster-box">
+                <div class="poster-section-title">Movies</div>
+                <div class="poster-row" aria-label="Recommended movies posters">
+                    {% for p in recs.movie_posters %}
+                        <div class="poster-card" title="{{ p.title }}">
+                            <img src="{{ p.url }}" alt="{{ p.title }} poster">
+                            <div class="poster-title">{{ p.title }}</div>
+                        </div>
+                    {% endfor %}
+                </div>
             </div>
         {% endif %}
     </div>
@@ -566,15 +576,23 @@
         if (libraryBuilding) return; // keep library message during build
         var phrases = [
             "Consulting Zoltarr's crystal ball...",
-            "Whispering to the genie of recommendations...",
+            "Checking out blockbuster shelves...",
             "Summoning Zoltarr's ancient wisdom...",
             "Peeking behind the velvet curtain...",
-            "Aligning the stars with Zoltarr...",
-            "Polishing the magic lamp...",
+            "Looking for hidden gems...",
+            "Polishing the magic lamp lol...",
             "Reading fortunes in your watch history...",
             "Asking the oracle (please hold)...",
             "Shuffling fate's deck...",
-            "Casting a spell for great picks..."
+            "Zoltar and chill?",
+            "Whoops, not that movie...",
+            "Uhhh... I mean, how about this one?",
+            "Don't yell at the developer",
+            "Fine tuning suggestions...",
+            "Checking spark plugs...",
+            "Reticulating Splines...",
+            "Optimizing the flux capacitor...",
+            "Spooling up turbines..."
         ];
         var el = document.getElementById('loading-text');
         if (!el) return;
