@@ -52,6 +52,7 @@
             margin-top: 16px;
             display: block;
             text-align: center;
+            transition: opacity .5s;
         }
     </style>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
@@ -74,6 +75,11 @@
             color: #f0eaea;
             font-family: Arial, sans-serif;
         }
+    .mode-toggle { display:inline-flex; border:1px solid #444; border-radius:8px; overflow:hidden; }
+    .mode-toggle input { display:none; }
+    .mode-toggle label { background:#222; color:#ccc; padding:6px 12px; cursor:pointer; user-select:none; font-size:0.85rem; }
+    .mode-toggle input:checked + label { background:#ffe066; color:#222; font-weight:600; }
+    .mode-toggle label + input + label { border-left:1px solid #444; }
     /* Tidy bullet lists inside table cells */
     td ul { margin: 0; padding-left: 1.2em; max-height: 280px; overflow: auto; }
     td li { margin: 0 0 3px 0; }
@@ -167,60 +173,10 @@
     table tr > td:nth-child(7) ul { max-width: 24rem; }
     </style>
 </head>
-<body>
+<body data-has-recs="{{ '1' if recs else '0' }}" data-user-mode="{{ '1' if user_mode else '0' }}">
     {% if not user_mode %}
     <a href="/settings" style="position:absolute;top:60px;left:18px;color:#ffe066;text-decoration:underline;font-size:1.1em;z-index:10;">⚙️ Settings</a>
-    <div style="position:absolute;top:110px;left:18px;z-index:10;background:#222;padding:12px 18px;border-radius:8px;box-shadow:0 0 8px #0006;max-width:380px;line-height:1.6;">
-        <div style="font-weight:bold;margin-bottom:6px;">Library Status (API only)</div>
-        <div id="library-status" style="margin-left:2px;">
-            <div>Movies: 
-                <span id="movie-status">{{ movie_status_only }}</span>
-                <span id="movie-status-icon" class="status-icon" title="Up to date">{% if movie_status_only == 'up to date' %}👍{% endif %}</span>
-            </div>
-            <div>Shows: 
-                <span id="show-status">{{ show_status_only }}</span>
-                <span id="show-status-icon" class="status-icon" title="Up to date">{% if show_status_only == 'up to date' %}👍{% endif %}</span>
-            </div>
-        </div>
-        <form id="rebuild-library-form" style="margin-top:10px;">
-            <button type="submit" style="background:#ffe066;color:#222;border:none;padding:6px 14px;border-radius:4px;font-weight:bold;cursor:pointer;">Rebuild Library DB</button>
-            <span id="rebuild-msg" style="margin-left:10px;color:#66ff99;font-size:0.98em;"></span>
-        </form>
-    </div>
     {% endif %}
-    <script>
-    document.addEventListener('DOMContentLoaded', function() {
-        var form = document.getElementById('rebuild-library-form');
-        var msg = document.getElementById('rebuild-msg');
-        var statusEl = document.getElementById('library-status');
-        if (form) {
-            form.addEventListener('submit', function(e) {
-                e.preventDefault();
-                msg.textContent = 'Rebuilding...';
-                var btn = form.querySelector('button[type="submit"]');
-                if (btn) { btn.disabled = true; btn.textContent = 'Rebuilding...'; }
-                fetch('/rebuild_library', {method: 'POST'})
-                  .then(r => r.json())
-                  .then(data => {
-                      // Update message and library status immediately
-                      msg.textContent = (data && data.status) ? data.status : 'Rebuild triggered.';
-                      // Update the vertical statuses
-                      var movieSpan = document.getElementById('movie-status');
-                      var showSpan = document.getElementById('show-status');
-                      var movieIcon = document.getElementById('movie-status-icon');
-                      var showIcon = document.getElementById('show-status-icon');
-                      if (movieSpan) movieSpan.textContent = 'not cached';
-                      if (showSpan) showSpan.textContent = 'not cached';
-                      if (movieIcon) movieIcon.textContent = '';
-                      if (showIcon) showIcon.textContent = '';
-                      // Trigger a quick reload so the backend starts fetching and the proper library overlay shows
-                      setTimeout(function() { window.location.reload(); }, 400);
-                  })
-                  .catch(() => { msg.textContent = 'Error rebuilding library.'; if (btn) { btn.disabled = false; btn.textContent = 'Rebuild Library DB'; } });
-            });
-        }
-    });
-    </script>
     {% if not user_mode %}
     <div class="debug-toggle">
         <input type="checkbox" id="toggle-debug" style="width:18px;height:18px;">
@@ -229,16 +185,16 @@
     {% endif %}
     {% if show_loading %}
     <div id="loading-overlay" data-library-building="true" style="display: flex;">
-        <div>
+        <div class="loading-inner" style="background:#000;border:1px solid #222;padding:26px 30px;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,0.7),0 0 12px rgba(0,0,0,0.6) inset;">
             <img id="loading-gif" src="/static/libraryload.gif" alt="Loading library...">
-            <span>{{ loading_message if loading_message else "Loading library data..." }}</span>
+            <span style="margin-top:14px;">{{ loading_message if loading_message else "Loading library data..." }}</span>
         </div>
     </div>
     {% else %}
     <div id="loading-overlay" data-library-building="false" style="display: none;">
-        <div>
+        <div class="loading-inner" style="background:#000;border:1px solid #222;padding:26px 30px;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,0.7),0 0 12px rgba(0,0,0,0.6) inset;">
             <img id="loading-gif" src="/static/load.gif" alt="Loading...">
-            <span id="loading-text">Loading Zoltarr's wisdom...</span>
+            <span id="loading-text" style="margin-top:14px;">Loading Zoltarr's wisdom...</span>
         </div>
     </div>
     {% endif %}
@@ -253,17 +209,71 @@
         </div>
     </div>
     <h2 style="text-align:center">History Based User Recommendations</h2>
+    {% if user_config_status and user_config_status|length > 0 %}
+    <div style="position:absolute;top:130px;left:18px;z-index:10;background:#222;padding:14px 18px;border-radius:10px;box-shadow:0 0 10px #0008;min-width:260px;">
+        <div style="font-weight:bold;margin-bottom:6px;color:#ffe066;">Configuration Status</div>
+        <ul style="list-style:none;margin:0;padding:0;font-size:0.85em;line-height:1.5;">
+            {% for it in user_config_status %}
+            <li style="display:flex;align-items:center;gap:6px;">
+                <span style="width:18px;text-align:center;">{% if it.ok %}✅{% else %}❌{% endif %}</span>
+                <span {% if not it.ok %}style="color:#ff8888;"{% endif %}>{{ it.name }}</span>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
     <form method="post" style="text-align:center; margin-bottom:20px;">
         {% if user_mode %}
-        <div style="width:100%;margin:10px auto 20px auto;display:flex;flex-direction:column;align-items:center;">
+            <div style="width:100%;margin:10px auto 12px auto;display:flex;flex-direction:column;align-items:center;">
                 <label for="user_login">Enter Plex email or username:</label>
-                <input name="user_login" id="user_login" type="text" placeholder="name@example.com or username" style="background:#222;color:#ffe066;border:1px solid #444;padding:8px 10px;border-radius:6px;min-width:280px;" />
+                <input name="user_login" id="user_login" value="{{ user_login_value or '' }}" type="text" placeholder="name@example.com or username" style="background:#222;color:#ffe066;border:1px solid #444;padding:8px 10px;border-radius:6px;min-width:280px;" />
             </div>
             {% if user_login_error %}
                 <div style="color:#ff8888;margin-top:6px;">{{ user_login_error }}</div>
             {% endif %}
-            <div class="cta-row">
-                <button class="primary-cta" type="submit">Get Recommendations</button>
+            <div style="margin-top:10px;display:flex;flex-direction:column;align-items:center;gap:10px;">
+                <div style="display:flex;gap:18px;flex-wrap:wrap;justify-content:center;align-items:flex-end;">
+                    <div>
+                        <label style="font-size:0.9em;display:block;margin-bottom:4px;">Mode</label>
+                        <div class="mode-toggle">
+                            <input type="radio" name="mode" id="mode-history-user" value="history" {% if mode!='custom' %}checked{% endif %} />
+                            <label for="mode-history-user">History</label>
+                            <input type="radio" name="mode" id="mode-custom-user" value="custom" {% if mode=='custom' %}checked{% endif %} />
+                            <label for="mode-custom-user">Custom</label>
+                        </div>
+                    </div>
+                    <div id="decade-wrap" {% if mode!='custom' %}style="display:none;"{% endif %}>
+                        <label style="font-size:0.9em;display:block;margin-bottom:4px;" for="decade">Decade</label>
+                        <select name="decade" id="decade" style="padding:6px 8px;min-width:120px;">
+                            <option value="">-- Any --</option>
+                            <option value="1950" {% if decade_selected==1950 %}selected{% endif %}>1950s</option>
+                            <option value="1960" {% if decade_selected==1960 %}selected{% endif %}>1960s</option>
+                            <option value="1970" {% if decade_selected==1970 %}selected{% endif %}>1970s</option>
+                            <option value="1980" {% if decade_selected==1980 %}selected{% endif %}>1980s</option>
+                            <option value="1990" {% if decade_selected==1990 %}selected{% endif %}>1990s</option>
+                            <option value="2000" {% if decade_selected==2000 %}selected{% endif %}>2000s</option>
+                            <option value="2010" {% if decade_selected==2010 %}selected{% endif %}>2010s</option>
+                            <option value="2020" {% if decade_selected==2020 %}selected{% endif %}>2020 - Now</option>
+                        </select>
+                    </div>
+                    <div id="genre-wrap" {% if mode!='custom' %}style="display:none;"{% endif %}>
+                        <label style="font-size:0.9em;display:block;margin-bottom:4px;" for="genre">Genre</label>
+                        <select name="genre" id="genre" style="padding:6px 8px;min-width:140px;">
+                            <option value="">-- Any --</option>
+                            {% set gmap = {'action':'Action','drama':'Drama','comedy':'Comedy','scifi':'Sci-Fi','horror':'Horror','thriller':'Thriller','documentary':'Documentary','animation':'Animation','family':'Family','fantasy':'Fantasy','romance':'Romance','crime':'Crime','mystery':'Mystery','adventure':'Adventure','war':'War','western':'Western','musical':'Musical','biography':'Biography','history':'History','sports':'Sports'} %}
+                            {% for k,v in gmap|dictsort(by='value') %}
+                                <option value="{{ k }}" {% if genre_selected==k %}selected{% endif %}>{{ v }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                {% if selection_desc %}
+                    <div style="color:#ddd08a;font-size:0.9em;margin-top:2px;">{{ selection_desc }}</div>
+                {% endif %}
+                <div id="custom-error-user" style="color:#ff8888;font-size:0.85em;margin-top:4px;">{% if debug_info and debug_info.error and (mode=='custom') and not recs %}{{ debug_info.error }}{% endif %}</div>
+                <div class="cta-row" style="margin-top:2px;">
+                    <button class="primary-cta" type="submit">Get Recommendations</button>
+                </div>
             </div>
         {% else %}
             <div class="user-row">
@@ -278,8 +288,49 @@
                 {% endif %}
                 </select>
             </div>
-            <div class="cta-row">
-                <button class="primary-cta" type="submit" {% if not users or users|length == 0 %}disabled{% endif %}>Get Recommendations</button>
+            <div style="margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:10px;">
+                <div style="display:flex;gap:20px;flex-wrap:wrap;justify-content:center;align-items:flex-end;">
+                    <div>
+                        <label style="font-size:0.95em;display:block;margin-bottom:4px;">Mode</label>
+                        <div class="mode-toggle">
+                            <input type="radio" name="mode" id="mode-history-admin" value="history" {% if mode!='custom' %}checked{% endif %} />
+                            <label for="mode-history-admin">History</label>
+                            <input type="radio" name="mode" id="mode-custom-admin" value="custom" {% if mode=='custom' %}checked{% endif %} />
+                            <label for="mode-custom-admin">Custom</label>
+                        </div>
+                    </div>
+                    <div id="decade-wrap" {% if mode!='custom' %}style="display:none;"{% endif %}>
+                        <label style="font-size:0.95em;display:block;margin-bottom:4px;" for="decade">Decade</label>
+                        <select name="decade" id="decade" style="padding:6px 8px;min-width:120px;">
+                            <option value="">-- Any --</option>
+                            <option value="1950" {% if decade_selected==1950 %}selected{% endif %}>1950s</option>
+                            <option value="1960" {% if decade_selected==1960 %}selected{% endif %}>1960s</option>
+                            <option value="1970" {% if decade_selected==1970 %}selected{% endif %}>1970s</option>
+                            <option value="1980" {% if decade_selected==1980 %}selected{% endif %}>1980s</option>
+                            <option value="1990" {% if decade_selected==1990 %}selected{% endif %}>1990s</option>
+                            <option value="2000" {% if decade_selected==2000 %}selected{% endif %}>2000s</option>
+                            <option value="2010" {% if decade_selected==2010 %}selected{% endif %}>2010s</option>
+                            <option value="2020" {% if decade_selected==2020 %}selected{% endif %}>2020 - Now</option>
+                        </select>
+                    </div>
+                    <div id="genre-wrap" {% if mode!='custom' %}style="display:none;"{% endif %}>
+                        <label style="font-size:0.95em;display:block;margin-bottom:4px;" for="genre">Genre</label>
+                        <select name="genre" id="genre" style="padding:6px 8px;min-width:140px;">
+                            <option value="">-- Any --</option>
+                            {% set gmap = {'action':'Action','drama':'Drama','comedy':'Comedy','scifi':'Sci-Fi','horror':'Horror','thriller':'Thriller','documentary':'Documentary','animation':'Animation','family':'Family','fantasy':'Fantasy','romance':'Romance','crime':'Crime','mystery':'Mystery','adventure':'Adventure','war':'War','western':'Western','musical':'Musical','biography':'Biography','history':'History','sports':'Sports'} %}
+                            {% for k,v in gmap|dictsort(by='value') %}
+                                <option value="{{ k }}" {% if genre_selected==k %}selected{% endif %}>{{ v }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                {% if selection_desc %}
+                    <div style="color:#ddd08a;font-size:0.95em;margin-top:4px;">{{ selection_desc }}</div>
+                {% endif %}
+                <div id="custom-error-admin" style="color:#ff8888;font-size:0.85em;margin-top:4px;">{% if debug_info and debug_info.error and (mode=='custom') and not recs %}{{ debug_info.error }}{% endif %}</div>
+                <div class="cta-row" style="margin-top:6px;">
+                    <button class="primary-cta" type="submit" {% if not users or users|length == 0 %}disabled{% endif %}>Get Recommendations</button>
+                </div>
             </div>
             <br>
             {% if not users or users|length == 0 %}
@@ -291,9 +342,18 @@
     <div style="width:100%;margin:10px auto 20px auto;display:flex;flex-direction:column;align-items:center;">
         <style>
             .poster-row { display:inline-flex; flex-wrap:wrap; gap:12px; align-items:flex-start; justify-content:center; }
-            .poster-card { width: 140px; text-align:center; }
-            .poster-card img { width: 100%; height: auto; border-radius: 10px; box-shadow: 0 2px 8px rgba(0,0,0,0.4); }
+            .poster-card { width:140px; text-align:center; }
+            /* Overlay metadata on hover (desktop only) */
+            .poster-overlay-wrap { position:relative; width:100%; aspect-ratio:2/3; overflow:hidden; border-radius:10px; }
+            .poster-overlay-wrap img { width:100%; height:100%; object-fit:cover; display:block; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.4); }
+            .poster-overlay { position:absolute; inset:0; background:rgba(0,0,0,0.82); color:#ddd; border-radius:10px; opacity:0; transition:opacity .22s ease; display:flex; flex-direction:column; padding:8px 9px 10px; box-sizing:border-box; border:1px solid #333; pointer-events:none; }
+            .poster-overlay:hover, .poster-overlay-wrap:hover .poster-overlay { opacity:1; }
+            .pb-title { font-size:0.9rem; font-weight:600; color:#ffe066; line-height:1.2; margin-bottom:4px; text-align:left; }
+            .pb-meta { font-size:0.78rem; color:#bbb; display:flex; justify-content:flex-start; gap:8px; flex-wrap:wrap; margin-bottom:6px; }
+            .pb-overview { font-size:0.75rem; color:#ddd; line-height:1.18; overflow:hidden; flex:1 1 auto; text-align:left; max-height:7.2em; display:-webkit-box; -webkit-line-clamp:6; -webkit-box-orient:vertical; line-clamp:6; text-overflow:ellipsis; }
+            .pb-rating { color:#ffd24d; }
             .poster-title { margin-top:6px; font-size:0.9em; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+            .poster-year { font-size:0.75em; color:#aaa; margin-top:2px; }
             .poster-section-title { color:#ffe066; margin: 10px 0 6px 0; font-weight:bold; text-align:center; font-size:1.35em; }
             .poster-box { display:inline-block; background:#1a1a1a; border:1px solid #333; border-radius:12px; padding:12px 14px 16px; box-shadow:0 2px 10px rgba(0,0,0,0.35); margin:14px 0; max-width:100%; }
             .poster-box .poster-section-title { margin: 4px 0 10px 0; }
@@ -323,76 +383,122 @@
             .poster-box.alt .poster-section-title { color:#ffe066; }
             .muted-note { color:#ddd08a; font-size:0.9em; text-align:center; margin-top:4px; }
         </style>
-        {% if recs.show_posters or recs.show_posters_unavailable %}
-            <div class="poster-sections-row">
-                {% if recs.show_posters %}
-                <div class="poster-box">
-                    <div class="poster-section-title">Shows on Plex</div>
-                    <div class="poster-row" aria-label="Recommended shows posters">
-                        {% for p in recs.show_posters[:9] %}
-                        <div class="poster-card" title="{{ p.title }}">
-                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;">{% endif %}
-                            <img src="{{ p.url }}" alt="{{ p.title }} poster">
-                            <div class="poster-title">{{ p.title }}</div>
-                            {% if p.href %}</a>{% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                
-                {% endif %}
-                {% if recs.show_posters_unavailable %}
-                <div class="poster-box alt">
-                    <div class="poster-section-title">Shows not on Plex... yet</div>
-                    <div class="poster-row" aria-label="Unavailable shows posters">
-                        {% for p in recs.show_posters_unavailable[:9] %}
-                        <div class="poster-card" title="{{ p.title }}">
-                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;">{% endif %}
-                            <img src="{{ p.url }}" alt="{{ p.title }} poster">
-                            <div class="poster-title">{{ p.title }}</div>
-                            {% if p.href %}</a>{% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
-            </div>
-        {% endif %}
+        {# Movies row (separate) #}
         {% if recs.movie_posters or recs.movie_posters_unavailable %}
-            <div class="poster-sections-row">
-                {% if recs.movie_posters %}
-                <div class="poster-box">
-                    <div class="poster-section-title">Movies on Plex</div>
-                    <div class="poster-row" aria-label="Recommended movies posters">
-                        {% for p in recs.movie_posters[:9] %}
-                        <div class="poster-card" title="{{ p.title }}">
-                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;">{% endif %}
+        <div class="poster-sections-row">
+            {% if recs.movie_posters %}
+            <div class="poster-box">
+                <div class="poster-section-title">Movies on Plex</div>
+                <div class="poster-row" aria-label="Recommended movies posters">
+                    {% for p in recs.movie_posters[:9] %}
+                    <div class="poster-card" title="{{ p.title }}">
+                        <div class="poster-overlay-wrap">
+                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
                             <img src="{{ p.url }}" alt="{{ p.title }} poster">
-                            <div class="poster-title">{{ p.title }}</div>
-                            {% if p.href %}</a>{% endif %}
+                            <div class="poster-overlay">
+                                <div class="pb-title">{{ p.title }}</div>
+                                <div class="pb-meta">
+                                    {% if p.year %}<span>{{ p.year }}</span>{% endif %}
+                                    {% if p.runtime %}<span>{{ p.runtime }}</span>{% endif %}
+                                    {% if p.vote %}<span class="pb-rating">★ {{ p.vote }}</span>{% endif %}
+                                </div>
+                                {% if p.overview %}<div class="pb-overview">{{ p.overview }}</div>{% else %}<div class="pb-overview" style="opacity:.45;">No synopsis.</div>{% endif %}
+                            </div>
                         </div>
-                        {% endfor %}
+                        <div class="poster-title">{{ p.title }}</div>
+                        {% if recs.ai_movie_years and recs.ai_movie_years.get(p.title) %}<div class="poster-year">{{ recs.ai_movie_years.get(p.title) }}</div>{% endif %}
                     </div>
+                    {% endfor %}
                 </div>
-                {% endif %}
-                {% if recs.movie_posters_unavailable %}
-                <div class="poster-box alt">
-                    <div class="poster-section-title">Movies not on Plex... yet</div>
-                    <div class="poster-row" aria-label="Unavailable movies posters">
-                        {% for p in recs.movie_posters_unavailable[:9] %}
-                        <div class="poster-card" title="{{ p.title }}">
-                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;">{% endif %}
-                            <img src="{{ p.url }}" alt="{{ p.title }} poster">
-                            <div class="poster-title">{{ p.title }}</div>
-                            {% if p.href %}</a>{% endif %}
-                        </div>
-                        {% endfor %}
-                    </div>
-                </div>
-                {% endif %}
             </div>
+            {% endif %}
+            {% if recs.movie_posters_unavailable %}
+            <div class="poster-box alt">
+                <div class="poster-section-title">Movies not on Plex... yet</div>
+                <div class="poster-row" aria-label="Unavailable movies posters">
+                    {% for p in recs.movie_posters_unavailable[:9] %}
+                    <div class="poster-card" title="{{ p.title }}">
+                        <div class="poster-overlay-wrap">
+                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
+                            <img src="{{ p.url }}" alt="{{ p.title }} poster">
+                            <div class="poster-overlay">
+                                <div class="pb-title">{{ p.title }}</div>
+                                <div class="pb-meta">
+                                    {% if p.year %}<span>{{ p.year }}</span>{% endif %}
+                                    {% if p.runtime %}<span>{{ p.runtime }}</span>{% endif %}
+                                    {% if p.vote %}<span class="pb-rating">★ {{ p.vote }}</span>{% endif %}
+                                </div>
+                                {% if p.overview %}<div class="pb-overview">{{ p.overview }}</div>{% else %}<div class="pb-overview" style="opacity:.45;">No synopsis.</div>{% endif %}
+                            </div>
+                        </div>
+                        <div class="poster-title">{{ p.title }}</div>
+                        {% if recs.ai_movie_years and recs.ai_movie_years.get(p.title) %}<div class="poster-year">{{ recs.ai_movie_years.get(p.title) }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
         {% endif %}
-        {% if recs.ai_categories %}
+        {# Shows row (separate) #}
+        {% if recs.show_posters or recs.show_posters_unavailable %}
+        <div class="poster-sections-row">
+            {% if recs.show_posters %}
+            <div class="poster-box">
+                <div class="poster-section-title">Shows on Plex</div>
+                <div class="poster-row" aria-label="Recommended shows posters">
+                    {% for p in recs.show_posters[:9] %}
+                    <div class="poster-card" title="{{ p.title }}">
+                        <div class="poster-overlay-wrap">
+                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
+                            <img src="{{ p.url }}" alt="{{ p.title }} poster">
+                            <div class="poster-overlay">
+                                <div class="pb-title">{{ p.title }}</div>
+                                <div class="pb-meta">
+                                    {% if p.year %}<span>{{ p.year }}</span>{% endif %}
+                                    {% if p.runtime %}<span>{{ p.runtime }}</span>{% endif %}
+                                    {% if p.vote %}<span class="pb-rating">★ {{ p.vote }}</span>{% endif %}
+                                </div>
+                                {% if p.overview %}<div class="pb-overview">{{ p.overview }}</div>{% else %}<div class="pb-overview" style="opacity:.45;">No synopsis.</div>{% endif %}
+                            </div>
+                        </div>
+                        <div class="poster-title">{{ p.title }}</div>
+                        {% if recs.ai_show_years and recs.ai_show_years.get(p.title) %}<div class="poster-year">{{ recs.ai_show_years.get(p.title) }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+            {% if recs.show_posters_unavailable %}
+            <div class="poster-box alt">
+                <div class="poster-section-title">Shows not on Plex... yet</div>
+                <div class="poster-row" aria-label="Unavailable shows posters">
+                    {% for p in recs.show_posters_unavailable[:9] %}
+                    <div class="poster-card" title="{{ p.title }}">
+                        <div class="poster-overlay-wrap">
+                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
+                            <img src="{{ p.url }}" alt="{{ p.title }} poster">
+                            <div class="poster-overlay">
+                                <div class="pb-title">{{ p.title }}</div>
+                                <div class="pb-meta">
+                                    {% if p.year %}<span>{{ p.year }}</span>{% endif %}
+                                    {% if p.runtime %}<span>{{ p.runtime }}</span>{% endif %}
+                                    {% if p.vote %}<span class="pb-rating">★ {{ p.vote }}</span>{% endif %}
+                                </div>
+                                {% if p.overview %}<div class="pb-overview">{{ p.overview }}</div>{% else %}<div class="pb-overview" style="opacity:.45;">No synopsis.</div>{% endif %}
+                            </div>
+                        </div>
+                        <div class="poster-title">{{ p.title }}</div>
+                        {% if recs.ai_show_years and recs.ai_show_years.get(p.title) %}<div class="poster-year">{{ recs.ai_show_years.get(p.title) }}</div>{% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    {# Show AI Categories only in history mode (not custom) #}
+    {% if recs.ai_categories and mode != 'custom' %}
             <div class="poster-box" style="display:block; width:85%; max-width:980px;">
                 {% set user_name = (selected_user.friendly_name or selected_user.username) if selected_user else None %}
                 <div class="poster-section-title">{{ (user_name ~ "'s") if user_name else 'AI' }} Categories</div>
@@ -432,46 +538,6 @@
             <th>Recently Watched</th>
         </tr>
         <tr>
-            <td>Shows</td>
-            <td>
-                {% if recs.shows %}
-                <ul>
-                    {% for it in recs.shows[:9] %}<li>{{ it }}</li>{% endfor %}
-                </ul>
-                {% else %}-{% endif %}
-            </td>
-            <td>
-                {% if recs.ai_shows_unavailable %}
-                <ul>
-                    {% for it in recs.ai_shows_unavailable %}<li>{{ it }}</li>{% endfor %}
-                </ul>
-                {% else %}-{% endif %}
-            </td>
-            <td>
-                {% set show_top = recs.ai_shows_titles if recs.ai_shows_titles else recs.ai_shows %}
-                {% if show_top %}
-                <ul>
-                    {% for it in show_top %}<li>{{ it }}</li>{% endfor %}
-                </ul>
-                {% else %}-{% endif %}
-            </td>
-            <td>
-                {% if recs.top_shows %}
-                <ul>
-                    {% for it in recs.top_shows %}<li>{{ it }}</li>{% endfor %}
-                </ul>
-                {% else %}-{% endif %}
-            </td>
-            <td>{% if recs.top_shows %}{{ recs.top_shows[0] }}{% else %}-{% endif %}</td>
-            <td>
-                {% if recs.debug and recs.debug.recent_shows %}
-                <ul>
-                    {% for it in recs.debug.recent_shows %}<li>{{ it }}</li>{% endfor %}
-                </ul>
-                {% else %}-{% endif %}
-            </td>
-        </tr>
-        <tr>
             <td>Movies</td>
             <td>
                 {% if recs.movies %}
@@ -507,6 +573,46 @@
                 {% if recs.debug and recs.debug.recent_movies %}
                 <ul>
                     {% for it in recs.debug.recent_movies %}<li>{{ it }}</li>{% endfor %}
+                </ul>
+                {% else %}-{% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td>Shows</td>
+            <td>
+                {% if recs.shows %}
+                <ul>
+                    {% for it in recs.shows[:9] %}<li>{{ it }}</li>{% endfor %}
+                </ul>
+                {% else %}-{% endif %}
+            </td>
+            <td>
+                {% if recs.ai_shows_unavailable %}
+                <ul>
+                    {% for it in recs.ai_shows_unavailable %}<li>{{ it }}</li>{% endfor %}
+                </ul>
+                {% else %}-{% endif %}
+            </td>
+            <td>
+                {% set show_top = recs.ai_shows_titles if recs.ai_shows_titles else recs.ai_shows %}
+                {% if show_top %}
+                <ul>
+                    {% for it in show_top %}<li>{{ it }}</li>{% endfor %}
+                </ul>
+                {% else %}-{% endif %}
+            </td>
+            <td>
+                {% if recs.top_shows %}
+                <ul>
+                    {% for it in recs.top_shows %}<li>{{ it }}</li>{% endfor %}
+                </ul>
+                {% else %}-{% endif %}
+            </td>
+            <td>{% if recs.top_shows %}{{ recs.top_shows[0] }}{% else %}-{% endif %}</td>
+            <td>
+                {% if recs.debug and recs.debug.recent_shows %}
+                <ul>
+                    {% for it in recs.debug.recent_shows %}<li>{{ it }}</li>{% endfor %}
                 </ul>
                 {% else %}-{% endif %}
             </td>
@@ -550,7 +656,7 @@
                     <li>Top watched calc: {{ recs.debug.timing.top_watched|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.top_watched is not none else 'N/A' }}</li>
                     <li>Library fetch: {{ recs.debug.timing.library_fetch|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.library_fetch is not none else 'N/A' }}</li>
                     <li>Unwatched filter: {{ recs.debug.timing.unwatched_filter|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.unwatched_filter is not none else 'N/A' }}</li>
-                    <li>Gemini call: {{ recs.debug.timing.gemini|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none else 'N/A' }}</li>
+                    <li>Gemini call: {% if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none and recs.debug.timing.gemini is number %}{{ recs.debug.timing.gemini|round(2) }}{% else %}{{ recs.debug.timing.gemini if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none else 'N/A' }}{% endif %}</li>
                     <li>AI parse: {{ recs.debug.timing.ai_parse|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.ai_parse is not none else 'N/A' }}</li>
                     <li>Fuzzy match: {{ recs.debug.timing.fuzzy_match|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.fuzzy_match is not none else 'N/A' }}</li>
                     <li>Posters fetch: {{ recs.debug.timing.posters|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.posters is not none else 'N/A' }}</li>
@@ -677,7 +783,10 @@
         img.src = gifs[idx];
     }
 
-    function pickLoadingPhrase() {
+    // Removed click-to-flip; hover now controls flip so clicks follow Overseerr links
+
+    var _zPhraseCycler = null;
+    function pickLoadingPhrase(initial) {
         if (libraryBuilding) return; // keep library message during build
         var phrases = [
             "Consulting Zoltarr's crystal ball...",
@@ -701,8 +810,19 @@
         ];
         var el = document.getElementById('loading-text');
         if (!el) return;
-        var idx = Math.floor(Math.random() * phrases.length);
-        el.textContent = phrases[idx];
+        if(initial){
+            el.textContent = phrases[Math.floor(Math.random()*phrases.length)];
+        }
+        // Clear any existing cycler
+        if(_zPhraseCycler){ clearInterval(_zPhraseCycler); _zPhraseCycler=null; }
+        _zPhraseCycler = setInterval(function(){
+            if(!overlayEl || overlayEl.style.display==='none'){ clearInterval(_zPhraseCycler); _zPhraseCycler=null; return; }
+            var next = phrases[Math.floor(Math.random()*phrases.length)];
+            // Avoid repeating same text consecutively
+            if(next === el.textContent){ next = phrases[(phrases.indexOf(next)+1)%phrases.length]; }
+            el.style.opacity = 0;
+            setTimeout(function(){ el.textContent = next; el.style.opacity = 1; }, 500);
+        }, 4000);
     }
 
     // Hide loading overlay when page is fully loaded (for initial load)
@@ -718,14 +838,30 @@
         // Only randomize on initial load if we're NOT in library-building mode
         if (!libraryBuilding) {
             pickLoadingGif(false);
-            pickLoadingPhrase();
+            pickLoadingPhrase(true);
         }
         var form = document.querySelector('form[method="post"]');
         if (form) {
-            form.addEventListener('submit', function() {
+            form.addEventListener('submit', function(e) {
+                // Client-side custom mode validation
+                var modeVal = (document.querySelector('input[name="mode"]:checked')||{}).value;
+                if(modeVal==='custom'){
+                    var decadeSel=document.getElementById('decade');
+                    var genreSel=document.getElementById('genre');
+                    var noDecade = !decadeSel || !decadeSel.value;
+                    var noGenre = !genreSel || !genreSel.value;
+                    if(noDecade && noGenre){
+                        e.preventDefault();
+                        var errElUser = document.getElementById('custom-error-user');
+                        var errElAdmin = document.getElementById('custom-error-admin');
+                        if(errElUser) errElUser.textContent = 'Select a decade or a genre (or both) for Custom mode.';
+                        if(errElAdmin) errElAdmin.textContent = 'Select a decade or a genre (or both) for Custom mode.';
+                        return false;
+                    }
+                }
                 // During library build, force the library-specific gif; otherwise randomize
                 pickLoadingGif(libraryBuilding);
-                pickLoadingPhrase();
+                pickLoadingPhrase(true);
                 var overlay = document.getElementById('loading-overlay');
                 if (overlay) overlay.style.display = 'flex';
             });
@@ -743,4 +879,57 @@
         }
     });
 </script>
-</html>
+<script>
+function toggleCustomFields(){
+    var customRadio=document.querySelector('input[name="mode"][value="custom"]');
+    var show = customRadio && customRadio.checked;
+    ['decade-wrap','genre-wrap'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.display = show? 'block':'none'; }});
+}
+document.addEventListener('DOMContentLoaded',function(){
+    toggleCustomFields();
+    var radios=document.querySelectorAll('input[name="mode"]');
+    radios.forEach(function(r){ r.addEventListener('change', toggleCustomFields); });
+});
+</script>
+<script>
+// Cookie helpers
+function zSetCookie(name,value,days){ try { var d=new Date(); d.setTime(d.getTime()+ (days*24*60*60*1000)); document.cookie=name+"="+encodeURIComponent(value)+";expires="+d.toUTCString()+";path=/"; } catch(e){} }
+function zGetCookie(name){ try { var n=name+"="; var ca=document.cookie.split(';'); for(var i=0;i<ca.length;i++){ var c=ca[i].trim(); if(c.indexOf(n)==0) return decodeURIComponent(c.substring(n.length,c.length)); } }catch(e){} return ""; }
+
+function zPopulateFromCookies(){
+    var hasRecs = document.body.getAttribute('data-has-recs')==='1';
+    if(hasRecs) return; // only populate on clean GET
+    var userMode = document.body.getAttribute('data-user-mode')==='1';
+    if(userMode){
+        var u = zGetCookie('z_user_login');
+        if(u){ var input=document.getElementById('user_login'); if(input && !input.value) input.value=u; }
+    }
+    var m = zGetCookie('z_mode');
+    if(m){ var radio = document.querySelector('input[name="mode"][value="'+m+'"]'); if(radio){ radio.checked=true; }}
+    var d = zGetCookie('z_decade');
+    if(d){ var decadeSel=document.getElementById('decade'); if(decadeSel){ decadeSel.value=d; }}
+    var g = zGetCookie('z_genre');
+    if(g){ var genreSel=document.getElementById('genre'); if(genreSel){ genreSel.value=g; }}
+    toggleCustomFields();
+}
+
+function zStoreOnSubmit(){
+    var form = document.querySelector('form[method="post"]');
+    if(!form) return;
+    form.addEventListener('submit', function(){
+        var user=document.getElementById('user_login'); if(user) zSetCookie('z_user_login', user.value||'', 30);
+        var modeVal = (document.querySelector('input[name="mode"]:checked')||{}).value || 'history'; zSetCookie('z_mode', modeVal, 30);
+        var decadeSel=document.getElementById('decade'); if(decadeSel) zSetCookie('z_decade', decadeSel.value||'', 30);
+        var genreSel=document.getElementById('genre'); if(genreSel) zSetCookie('z_genre', genreSel.value||'', 30);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', function(){
+    zPopulateFromCookies();
+    zStoreOnSubmit();
+    // If this is a POST page with recs, convert history state to GET to avoid resubmit prompt
+    if(document.body.getAttribute('data-has-recs')==='1'){
+        try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e){}
+    }
+});
+</script>

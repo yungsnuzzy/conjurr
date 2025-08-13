@@ -14,10 +14,17 @@ A lightweight guide to interact with the Flask service programmatically. This ap
 ## Get Recommendations
 Returns a JSON bundle of AI recommendations, availability in your Plex library (via Tautulli), user watch stats, posters (if TMDb is configured), and debug/timing/AI metadata.
 
+Two modes influence the AI prompt:
+- history (default): Pure history-based taste modeling. Includes ai_categories ticker.
+- custom: Requires at least one of decade or genre; blends 40% historical taste + 60% filter targeting. Categories (ai_categories) suppressed in UI; field may be empty.
+
 - Method: GET
 - Path: `/recommendations`
 - Query params:
   - `user_id` (required): Tautulli user ID
+  - `mode` (optional): 'history' (default) or 'custom'
+  - `decade` (optional, custom mode): One of 1950,1960,...,2020 (2020 = 2020 and later). Must supply decade or genre (or both) when mode=custom.
+  - `genre` (optional, custom mode): One of the supported short codes (action, drama, comedy, scifi, horror, thriller, documentary, animation, family, fantasy, romance, crime, mystery, adventure, war, western, musical, biography, history, sports).
 
 ### Example (PowerShell)
 ```powershell
@@ -45,6 +52,10 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user_i
   "show_posters": [{"title": "Title A", "url": "https://...", "source": "tmdb"}],
   "movie_posters": [{"title": "Movie A", "url": "https://...", "source": "tmdb"}],
   "history_count": 42,
+  "mode": "history",
+  "decade_code": 1980,
+  "genre_code": "scifi",
+  "selection_desc": "Best of 1980s Sci-Fi",
   "debug": {
     "timing": {
       "user_history": 0.12,
@@ -90,6 +101,8 @@ Notes:
 - Posters are included only if a TMDb API key is configured; sources are labeled (e.g., `tmdb`).
 - If `OVERSEERR_URL` is configured, poster tiles will link out to the corresponding item page in Overseerr.
 - Daily model quotas can be configured via `GEMINI_DAILY_QUOTAS` (JSON) to soft-cap usage; see README.
+- In custom mode the server will return `mode` plus any `decade_code` / `genre_code` provided; `ai_categories` may be an empty list.
+- If mode=custom and neither decade nor genre is supplied the server returns 400 with an error JSON payload.
 
 ## Reset/Rebuild Library Cache
 Forces the app to drop the local library cache; the next recommendation call (or page load) will repopulate it from Tautulli.

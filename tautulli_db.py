@@ -145,3 +145,76 @@ def db_get_user_watch_history_all(db_path: str, user_id: str):
         return _select_history(conn, user_id, after=None, limit=None)
     finally:
         conn.close()
+
+
+def db_get_all_library_titles(db_path: str, media_type: str) -> List[str]:
+    """Best-effort extraction of full library item titles for a media type from the Tautulli DB.
+
+    Tautulli's schema can vary a bit by version. We attempt several strategies:
+      1. If table 'library_media_info' exists, use it (preferred) filtering by a type column.
+      2. Fallback: If only watched metadata exists (session_history_metadata), we return the
+         union of watched titles (this is incomplete for availability, but better than empty).
+    Returns a sorted, de-duplicated list. May be partial if fallback path used.
+    """
+    conn = _connect(db_path)
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        tables = {row[0] for row in cur.fetchall()}
+        titles = set()
+        partial = False
+        if 'library_media_info' in tables:
+            cols = _get_columns(conn, 'library_media_info')
+            # Determine type column
+            type_col = None
+            for cand in ('section_type', 'media_type'):
+                if cand in cols:
+                    type_col = cand
+                    break
+            if 'title' in cols:
+                if type_col:
+                    try:
+                        cur.execute(f"SELECT DISTINCT title FROM library_media_info WHERE {type_col}=?", (media_type,))
+                    except Exception:
+                        cur.execute("SELECT DISTINCT title FROM library_media_info")
+                else:
+                    cur.execute("SELECT DISTINCT title FROM library_media_info")
+                for (t,) in cur.fetchall():
+                    if t:
+                        titles.add(t)
+        # Fallback: use watched metadata (incomplete)
+        if not titles and 'session_history_metadata' in tables:
+            partial = True
+            sh_cols = _get_columns(conn, 'session_history_metadata')
+            if 'title' in sh_cols or 'grandparent_title' in sh_cols:
+                q_parts = []
+                if media_type == 'movie' and 'title' in sh_cols:
+                    q_parts.append('title')
+                if media_type == 'show':
+                    # For shows, grandparent_title often carries series name
+                    if 'grandparent_title' in sh_cols:
+                        q_parts.append('grandparent_title')
+                    elif 'series_name' in sh_cols:
+                        q_parts.append('series_name')
+                if q_parts:
+                    # Build SELECT DISTINCT over first available column
+                    col = q_parts[0]
+                    try:
+                        cur.execute(f"SELECT DISTINCT {col} FROM session_history_metadata")
+                        for (t,) in cur.fetchall():
+                            if t:
+                                titles.add(t)
+                    except Exception:
+                        pass
+        # Attach partial flag in global for caller (cannot import flask.g here cleanly)
+        # Caller will interpret via length/flag; we just return titles.
+        out = sorted(titles)
+        # Encode partial marker by appending a sentinel if needed (caller can strip)
+        if partial:
+            try:
+                out.append('__PARTIAL__')  # sentinel; caller will remove from display
+            except Exception:
+                pass
+        return out
+    finally:
+        conn.close()

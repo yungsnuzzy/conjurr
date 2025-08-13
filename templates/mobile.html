@@ -49,9 +49,10 @@
         .section h3 { color:var(--accent); margin: 2px 0 10px; text-align:center; font-size:1.1rem; }
         .username { color:var(--accent); text-align:center; font-weight:700; font-size:1.25rem; margin: 2px 0 6px; }
         .grid { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
-        .card { width: 42vw; max-width: 160px; text-align:center; }
-        .card img { width:100%; height:auto; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.4); }
-        .card .t { margin-top:6px; font-size:0.9rem; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .card { width:42vw; max-width:160px; text-align:center; }
+    .card img { width:100%; height:auto; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.4); display:block; }
+    .card .t { margin-top:6px; font-size:0.9rem; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .card .y { font-size:0.7rem; color:#aaa; margin-top:2px; }
     .section.alt { background:#1a1a00; border-color:#6b6b1f; }
     .note { color:#ddd08a; font-size:0.9rem; text-align:center; margin-top:4px; }
 
@@ -77,9 +78,9 @@
 </head>
 <body>
     <div id="loading-overlay">
-        <div>
-            <img id="loading-gif" src="/static/load.gif" alt="Loading..." />
-            <span id="loading-text">Loading Zoltarr's wisdom...</span>
+        <div class="loading-inner" style="background:#000;border:1px solid #222;padding:22px 26px;border-radius:18px;box-shadow:0 4px 26px rgba(0,0,0,0.7),0 0 12px rgba(0,0,0,0.55) inset;display:flex;flex-direction:column;align-items:center;">
+            <img id="loading-gif" src="/static/load.gif" alt="Loading..." onerror="this.onerror=null;this.src='/static/load.gif';" />
+            <span id="loading-text" style="margin-top:12px;">Loading Zoltarr's wisdom...</span>
         </div>
     </div>
 
@@ -100,10 +101,56 @@
 
         <form method="post">
             <label for="user_login">Enter Plex email or username:</label>
-            <input name="user_login" id="user_login" type="text" placeholder="name@example.com or username" />
+            <input name="user_login" id="user_login" value="{{ user_login_value or '' }}" type="text" placeholder="name@example.com or username" />
             {% if user_login_error %}
                 <div class="err">{{ user_login_error }}</div>
             {% endif %}
+            <div style="display:flex;flex-wrap:wrap;gap:14px;justify-content:center;margin-top:4px;">
+                <style>
+                    .mode-toggle { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+                    .mode-toggle input { display:none; }
+                    .mode-toggle label { background:#222; color:#ccc; padding:6px 10px; cursor:pointer; font-size:0.8rem; user-select:none; }
+                    .mode-toggle input:checked + label { background:var(--accent); color:#222; font-weight:600; }
+                    .mode-toggle label + input + label { border-left:1px solid var(--border); }
+                </style>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:2px;">
+                    <label style="font-size:0.8rem;display:block;">Mode</label>
+                    <div class="mode-toggle" id="mode-toggle-mobile">
+                        <input type="radio" name="mode" id="m-history" value="history" {% if mode!='custom' %}checked{% endif %} />
+                        <label for="m-history">History</label>
+                        <input type="radio" name="mode" id="m-custom" value="custom" {% if mode=='custom' %}checked{% endif %} />
+                        <label for="m-custom">Custom</label>
+                    </div>
+                </div>
+                <div id="decade-wrap" data-block="decade" style="min-width:120px;display:none;">
+                    <label style="font-size:0.8rem;display:block;margin-bottom:2px;" for="decade">Decade</label>
+                    <select name="decade" id="decade" style="width:100%;background:#222;color:var(--accent);border:1px solid var(--border);padding:6px 8px;border-radius:6px;">
+                        <option value="">-- Any --</option>
+                        <option value="1950" {% if decade_selected==1950 %}selected{% endif %}>1950s</option>
+                        <option value="1960" {% if decade_selected==1960 %}selected{% endif %}>1960s</option>
+                        <option value="1970" {% if decade_selected==1970 %}selected{% endif %}>1970s</option>
+                        <option value="1980" {% if decade_selected==1980 %}selected{% endif %}>1980s</option>
+                        <option value="1990" {% if decade_selected==1990 %}selected{% endif %}>1990s</option>
+                        <option value="2000" {% if decade_selected==2000 %}selected{% endif %}>2000s</option>
+                        <option value="2010" {% if decade_selected==2010 %}selected{% endif %}>2010s</option>
+                        <option value="2020" {% if decade_selected==2020 %}selected{% endif %}>2020 - Now</option>
+                    </select>
+                </div>
+                <div id="genre-wrap" data-block="genre" style="min-width:140px;display:none;">
+                    <label style="font-size:0.8rem;display:block;margin-bottom:2px;" for="genre">Genre</label>
+                    <select name="genre" id="genre" style="width:100%;background:#222;color:var(--accent);border:1px solid var(--border);padding:6px 8px;border-radius:6px;">
+                        <option value="">-- Any --</option>
+                        {% set gmap = {'action':'Action','drama':'Drama','comedy':'Comedy','scifi':'Sci-Fi','horror':'Horror','thriller':'Thriller','documentary':'Documentary','animation':'Animation','family':'Family','fantasy':'Fantasy','romance':'Romance','crime':'Crime','mystery':'Mystery','adventure':'Adventure','war':'War','western':'Western','musical':'Musical','biography':'Biography','history':'History','sports':'Sports'} %}
+                        {% for k,v in gmap|dictsort(by='value') %}
+                            <option value="{{ k }}" {% if genre_selected==k %}selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            {% if selection_desc %}
+                <div class="note" style="margin-top:4px;">{{ selection_desc }}</div>
+            {% endif %}
+            <div id="custom-error-mobile" class="err" style="margin-top:4px;">{% if debug_info and debug_info.error and mode=='custom' and not recs %}{{ debug_info.error }}{% endif %}</div>
             <button class="primary-cta" type="submit">Get Recommendations</button>
         </form>
 
@@ -112,41 +159,10 @@
                 {% set user_name = (selected_user.friendly_name or selected_user.username) %}
                 {% if user_name %}<div class="username">Recommendations for {{ user_name }}</div>{% endif %}
             {% endif %}
-
-            {% if recs.show_posters %}
-                <div class="section" aria-label="Recommended shows posters">
-                    <h3>Shows on Plex</h3>
-                    {% if recs.show_posters and recs.show_posters[0].href %}
+            {% if recs.show_posters and recs.show_posters[0].href %}
                         <div class="note">Tap a poster to open the title in Overseerr.</div>
-                    {% endif %}
-                    <div class="grid">
-                        {% for p in recs.show_posters[:9] %}
-                            <div class="card" title="{{ p.title }}">
-                                {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:block;">{% endif %}
-                                <img src="{{ p.url }}" alt="{{ p.title }} poster" />
-                                <div class="t">{{ p.title }}</div>
-                                {% if p.href %}</a>{% endif %}
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
             {% endif %}
-            {% if recs.show_posters_unavailable %}
-                <div class="section alt" aria-label="Unavailable shows posters">
-                    <h3>Shows not on Plex... yet</h3>
-                    <div class="grid">
-                        {% for p in recs.show_posters_unavailable[:9] %}
-                            <div class="card" title="{{ p.title }}">
-                                {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:block;">{% endif %}
-                                <img src="{{ p.url }}" alt="{{ p.title }} poster" />
-                                <div class="t">{{ p.title }}</div>
-                                {% if p.href %}</a>{% endif %}
-                            </div>
-                        {% endfor %}
-                    </div>
-                </div>
-            {% endif %}
-
+            {# Movies first #}
             {% if recs.movie_posters %}
                 <div class="section" aria-label="Recommended movies posters">
                     <h3>Movies on Plex</h3>
@@ -156,6 +172,7 @@
                                 {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:block;">{% endif %}
                                 <img src="{{ p.url }}" alt="{{ p.title }} poster" />
                                 <div class="t">{{ p.title }}</div>
+                                {% if recs.ai_movie_years and recs.ai_movie_years.get(p.title) %}<div class="y">{{ recs.ai_movie_years.get(p.title) }}</div>{% endif %}
                                 {% if p.href %}</a>{% endif %}
                             </div>
                         {% endfor %}
@@ -171,6 +188,7 @@
                                 {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:block;">{% endif %}
                                 <img src="{{ p.url }}" alt="{{ p.title }} poster" />
                                 <div class="t">{{ p.title }}</div>
+                                {% if recs.ai_movie_years and recs.ai_movie_years.get(p.title) %}<div class="y">{{ recs.ai_movie_years.get(p.title) }}</div>{% endif %}
                                 {% if p.href %}</a>{% endif %}
                             </div>
                         {% endfor %}
@@ -178,7 +196,42 @@
                 </div>
             {% endif %}
 
-            {% if recs.ai_categories %}
+            {# Shows after movies #}
+            {% if recs.show_posters %}
+                <div class="section" aria-label="Recommended shows posters">
+                    <h3>Shows on Plex</h3>
+                    <div class="grid">
+                        {% for p in recs.show_posters[:9] %}
+                            <div class="card" title="{{ p.title }}">
+                                {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:block;">{% endif %}
+                                <img src="{{ p.url }}" alt="{{ p.title }} poster" />
+                                <div class="t">{{ p.title }}</div>
+                                {% if recs.ai_show_years and recs.ai_show_years.get(p.title) %}<div class="y">{{ recs.ai_show_years.get(p.title) }}</div>{% endif %}
+                                {% if p.href %}</a>{% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+            {% if recs.show_posters_unavailable %}
+                <div class="section alt" aria-label="Unavailable shows posters">
+                    <h3>Shows not on Plex... yet</h3>
+                    <div class="grid">
+                        {% for p in recs.show_posters_unavailable[:9] %}
+                            <div class="card" title="{{ p.title }}">
+                                {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:block;">{% endif %}
+                                <img src="{{ p.url }}" alt="{{ p.title }} poster" />
+                                <div class="t">{{ p.title }}</div>
+                                {% if recs.ai_show_years and recs.ai_show_years.get(p.title) %}<div class="y">{{ recs.ai_show_years.get(p.title) }}</div>{% endif %}
+                                {% if p.href %}</a>{% endif %}
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {# Show AI Categories only for history mode #}
+            {% if recs.ai_categories and mode != 'custom' %}
                 <div class="section">
                     {% set user_name = (selected_user.friendly_name or selected_user.username) if selected_user else None %}
                     <h3>{{ (user_name ~ "'s") if user_name else 'AI' }} Categories</h3>
@@ -204,15 +257,6 @@
                         <th>Recently Watched</th>
                     </tr>
                     <tr>
-                        <td>Shows</td>
-                        <td>{% if recs.shows %}<ul>{% for it in recs.shows[:9] %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
-                        <td>{% if recs.ai_shows_unavailable %}<ul>{% for it in recs.ai_shows_unavailable %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
-                        <td>{% set show_top = recs.ai_shows_titles if recs.ai_shows_titles else recs.ai_shows %}{% if show_top %}<ul>{% for it in show_top %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
-                        <td>{% if recs.top_shows %}<ul>{% for it in recs.top_shows %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
-                        <td>{% if recs.top_shows %}{{ recs.top_shows[0] }}{% else %}-{% endif %}</td>
-                        <td>{% if recs.debug and recs.debug.recent_shows %}<ul>{% for it in recs.debug.recent_shows %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
-                    </tr>
-                    <tr>
                         <td>Movies</td>
                         <td>{% if recs.movies %}<ul>{% for it in recs.movies[:9] %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
                         <td>{% if recs.ai_movies_unavailable %}<ul>{% for it in recs.ai_movies_unavailable %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
@@ -220,6 +264,15 @@
                         <td>{% if recs.top_movies %}<ul>{% for it in recs.top_movies %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
                         <td>{% if recs.top_movies %}{{ recs.top_movies[0] }}{% else %}-{% endif %}</td>
                         <td>{% if recs.debug and recs.debug.recent_movies %}<ul>{% for it in recs.debug.recent_movies %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <td>Shows</td>
+                        <td>{% if recs.shows %}<ul>{% for it in recs.shows[:9] %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.ai_shows_unavailable %}<ul>{% for it in recs.ai_shows_unavailable %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% set show_top = recs.ai_shows_titles if recs.ai_shows_titles else recs.ai_shows %}{% if show_top %}<ul>{% for it in show_top %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.top_shows %}<ul>{% for it in recs.top_shows %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.top_shows %}{{ recs.top_shows[0] }}{% else %}-{% endif %}</td>
+                        <td>{% if recs.debug and recs.debug.recent_shows %}<ul>{% for it in recs.debug.recent_shows %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
                     </tr>
                 </table>
             </div>
@@ -233,22 +286,85 @@
             var img = document.getElementById('loading-gif');
             if (!img) return;
             var gifs = ['/static/load.gif', '/static/load2.gif', '/static/load3.gif'];
-            img.src = gifs[Math.floor(Math.random() * gifs.length)];
+            // Preload & pick a working gif; fall back gracefully.
+            var shuffled = gifs.slice().sort(function(){ return Math.random()-0.5; });
+            var picked = null;
+            var tryNext = function(){
+                if(!shuffled.length){ picked = gifs[0]; img.src = picked; return; }
+                var candidate = shuffled.shift();
+                var test = new Image();
+                test.onload = function(){ picked = candidate; img.src = picked; };
+                test.onerror = function(){ tryNext(); };
+                test.src = candidate + '?v=' + Date.now(); // cache-bust to avoid stale/broken cache
+            };
+            tryNext();
+            // Safety fallback if none load within 1500ms
+            setTimeout(function(){ if(!picked){ img.src = '/static/load.gif'; } }, 1500);
             var phrases = [
                 "Consulting Zoltarr's crystal ball...",
                 "Checking out blockbuster shelves...",
                 "Summoning Zoltarr's ancient wisdom...",
+                "Peeking behind the velvet curtain...",
                 "Looking for hidden gems...",
-                "Optimizing the flux capacitor..."
+                "Polishing the magic lamp lol...",
+                "Reading fortunes in your watch history...",
+                "Asking the oracle (please hold)...",
+                "Shuffling fate's deck...",
+                "Zoltarr and chill?",
+                "Whoops, not that movie...",
+                "Uhhh... I mean, how about this one?",
+                "Don't yell at the developer",
+                "Fine tuning suggestions...",
+                "Checking spark plugs...",
+                "Reticulating Splines...",
+                "Optimizing the flux capacitor...",
+                "Spooling up turbines..."
             ];
             var el = document.getElementById('loading-text');
             if (el) el.textContent = phrases[Math.floor(Math.random() * phrases.length)];
         }
         window.addEventListener('load', function(){ var o = document.getElementById('loading-overlay'); if (o) o.style.display = 'none'; });
+        function toggleCustomMobile(){
+            var history = document.getElementById('m-history');
+            var show = !(history && history.checked);
+            ['decade-wrap','genre-wrap'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.display = show? 'block':'none'; }});
+        }
+        // Cookie helpers
+        function zSetCookie(name,value,days){ try { var d=new Date(); d.setTime(d.getTime()+ (days*24*60*60*1000)); document.cookie=name+"="+encodeURIComponent(value)+";expires="+d.toUTCString()+";path=/"; } catch(e){} }
+        function zGetCookie(name){ try { var n=name+"="; var ca=document.cookie.split(';'); for(var i=0;i<ca.length;i++){ var c=ca[i].trim(); if(c.indexOf(n)==0) return decodeURIComponent(c.substring(n.length,c.length)); } }catch(e){} return ""; }
+        function zPopulateFromCookies(){
+            var hasRecsFlag = "{{ '1' if recs else '0' }}";
+            if(hasRecsFlag==='1') return; // do not repopulate if showing recs
+            var u = zGetCookie('z_user_login'); if(u){ var input=document.getElementById('user_login'); if(input && !input.value) input.value=u; }
+            var m = zGetCookie('z_mode'); if(m){ var r=document.querySelector('input[name="mode"][value="'+m+'"]'); if(r){ r.checked=true; }}
+            var d = zGetCookie('z_decade'); if(d){ var ds=document.getElementById('decade'); if(ds) ds.value=d; }
+            var g = zGetCookie('z_genre'); if(g){ var gs=document.getElementById('genre'); if(gs) gs.value=g; }
+            toggleCustomMobile();
+        }
+        function zStoreOnSubmit(){
+            var form=document.querySelector('form[method="post"]'); if(!form) return;
+            form.addEventListener('submit', function(){
+                var user=document.getElementById('user_login'); if(user) zSetCookie('z_user_login', user.value||'', 30);
+                var modeVal=(document.querySelector('input[name="mode"]:checked')||{}).value || 'history'; zSetCookie('z_mode', modeVal, 30);
+                var d=document.getElementById('decade'); if(d) zSetCookie('z_decade', d.value||'', 30);
+                var g=document.getElementById('genre'); if(g) zSetCookie('z_genre', g.value||'', 30);
+            });
+        }
         document.addEventListener('DOMContentLoaded', function() {
             var form = document.querySelector('form[method="post"]');
             if (form) {
-                form.addEventListener('submit', function() {
+                form.addEventListener('submit', function(e) {
+                    var modeVal = (document.querySelector('input[name="mode"]:checked')||{}).value;
+                    if(modeVal==='custom'){
+                        var decadeSel=document.getElementById('decade');
+                        var genreSel=document.getElementById('genre');
+                        if((!decadeSel || !decadeSel.value) && (!genreSel || !genreSel.value)){
+                            e.preventDefault();
+                            var err=document.getElementById('custom-error-mobile');
+                            if(err) err.textContent='Select a decade or a genre (or both) for Custom mode.';
+                            return false;
+                        }
+                    }
                     randomizeLoading();
                     var overlay = document.getElementById('loading-overlay');
                     if (overlay) overlay.style.display = 'flex';
@@ -264,6 +380,12 @@
                     toggle.textContent = hidden ? 'hide table details' : 'show table details';
                 });
             }
+            // Initialize from cookies if clean load (no recs)
+            zPopulateFromCookies();
+            zStoreOnSubmit();
+            toggleCustomMobile();
+            ['m-history','m-custom'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.addEventListener('change', toggleCustomMobile); }});
+            if("{{ '1' if recs else '0' }}"==='1'){ try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e){} }
         });
     </script>
 </body>
