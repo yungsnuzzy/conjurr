@@ -157,6 +157,7 @@
     </style>
 </head>
 <body>
+    {% if not user_mode %}
     <a href="/settings" style="position:absolute;top:60px;left:18px;color:#ffe066;text-decoration:underline;font-size:1.1em;z-index:10;">⚙️ Settings</a>
     <div style="position:absolute;top:110px;left:18px;z-index:10;background:#222;padding:12px 18px;border-radius:8px;box-shadow:0 0 8px #0006;max-width:380px;line-height:1.6;">
         <div style="font-weight:bold;margin-bottom:6px;">Library Status (API only)</div>
@@ -175,6 +176,7 @@
             <span id="rebuild-msg" style="margin-left:10px;color:#66ff99;font-size:0.98em;"></span>
         </form>
     </div>
+    {% endif %}
     <script>
     document.addEventListener('DOMContentLoaded', function() {
         var form = document.getElementById('rebuild-library-form');
@@ -208,10 +210,12 @@
         }
     });
     </script>
+    {% if not user_mode %}
     <div class="debug-toggle">
         <input type="checkbox" id="toggle-debug" style="width:18px;height:18px;">
         <label for="toggle-debug">Show Debug Info</label>
     </div>
+    {% endif %}
     {% if show_loading %}
     <div id="loading-overlay" data-library-building="true" style="display: flex;">
         <div>
@@ -236,24 +240,37 @@
     </div>
     <h2 style="text-align:center">History Based User Recommendations</h2>
     <form method="post" style="text-align:center; margin-bottom:20px;">
-        <div class="user-row">
-            <label for="user_id">Select User:</label>
-            <select name="user_id" id="user_id">
-            {% if users and users|length > 0 %}
-                {% for user in users %}
-                    <option value="{{ user.user_id }}" {% if selected_user and user.user_id == selected_user.user_id %}selected{% endif %}>{{ user.friendly_name or user.username }}</option>
-                {% endfor %}
-            {% else %}
-                <option disabled selected>No users found</option>
+        {% if user_mode %}
+            <div class="user-row">
+                <label for="user_login">Enter Plex email or username:</label>
+                <input name="user_login" id="user_login" type="text" placeholder="name@example.com or username" style="background:#222;color:#ffe066;border:1px solid #444;padding:8px 10px;border-radius:6px;min-width:280px;" />
+            </div>
+            {% if user_login_error %}
+                <div style="color:#ff8888;margin-top:6px;">{{ user_login_error }}</div>
             {% endif %}
-            </select>
-        </div>
-        <div class="cta-row">
-            <button class="primary-cta" type="submit" {% if not users or users|length == 0 %}disabled{% endif %}>Get Recommendations</button>
-        </div>
-        <br>
-        {% if not users or users|length == 0 %}
-            <div style="color: #ff8888; margin-top: 8px;">No users returned from Tautulli. Check Settings or Tautulli connectivity.</div>
+            <div class="cta-row">
+                <button class="primary-cta" type="submit">Get Recommendations</button>
+            </div>
+        {% else %}
+            <div class="user-row">
+                <label for="user_id">Select User:</label>
+                <select name="user_id" id="user_id">
+                {% if users and users|length > 0 %}
+                    {% for user in users %}
+                        <option value="{{ user.user_id }}" {% if selected_user and user.user_id == selected_user.user_id %}selected{% endif %}>{{ user.friendly_name or user.username }}</option>
+                    {% endfor %}
+                {% else %}
+                    <option disabled selected>No users found</option>
+                {% endif %}
+                </select>
+            </div>
+            <div class="cta-row">
+                <button class="primary-cta" type="submit" {% if not users or users|length == 0 %}disabled{% endif %}>Get Recommendations</button>
+            </div>
+            <br>
+            {% if not users or users|length == 0 %}
+                <div style="color: #ff8888; margin-top: 8px;">No users returned from Tautulli. Check Settings or Tautulli connectivity.</div>
+            {% endif %}
         {% endif %}
     </form>
     {% if recs %}
@@ -323,7 +340,15 @@
     {% if recs %}
     <br>
     <br>
-    <table>
+    {% if user_mode %}
+        <div style="text-align:center;margin-bottom:8px;">
+            <a href="#" id="toggle-details" style="color:#ffe066;text-decoration:underline;font-size:0.95em;">show table details</a>
+        </div>
+        <div id="details-container" style="display:none;">
+            <table>
+    {% else %}
+            <table>
+    {% endif %}
         <tr>
             <th>Type</th>
             <th>Recommendations (Available, Unwatched)</th>
@@ -414,8 +439,11 @@
             </td>
         </tr>
     </table>
+    {% if user_mode %}
+        </div>
     {% endif %}
-    {% if recs %}
+    {% endif %}
+    {% if recs and not user_mode %}
     <div id="timing-section" style="width:60%;margin:20px auto;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
             <div style="margin:10px 0;min-width:220px;">
@@ -476,6 +504,7 @@
         </div>
     </div>
     {% endif %}
+    {% if not user_mode %}
     <div class="debug-section" id="debug-section" style="width:50%;margin:20px auto;">
         {% if recs %}
             {% if recs.debug.library_shows_full %}
@@ -541,12 +570,13 @@
             </div>
         {% endif %}
     </div>
+    {% endif %}
 </body>
 <script>
     // Whether the library is currently being built (from server-side state via data attribute)
     var overlayEl = document.getElementById('loading-overlay');
     var libraryBuilding = !!(overlayEl && overlayEl.getAttribute('data-library-building') === 'true');
-    // Debug toggle logic
+    // Debug toggle logic (only present when not in user mode)
     document.addEventListener('DOMContentLoaded', function() {
         var debugToggle = document.getElementById('toggle-debug');
         var debugSection = document.getElementById('debug-section');
@@ -558,7 +588,6 @@
                     debugSection.classList.remove('visible');
                 }
             });
-            // Start hidden
             debugSection.classList.remove('visible');
         }
     });
@@ -626,6 +655,17 @@
                 pickLoadingPhrase();
                 var overlay = document.getElementById('loading-overlay');
                 if (overlay) overlay.style.display = 'flex';
+            });
+        }
+        // Table details toggle for user mode
+        var toggle = document.getElementById('toggle-details');
+        var details = document.getElementById('details-container');
+        if (toggle && details) {
+            toggle.addEventListener('click', function(e) {
+                e.preventDefault();
+                var isHidden = details.style.display === 'none' || details.style.display === '';
+                details.style.display = isHidden ? 'block' : 'none';
+                toggle.textContent = isHidden ? 'hide table details' : 'show table details';
             });
         }
     });
