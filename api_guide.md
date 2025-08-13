@@ -11,7 +11,7 @@ A lightweight guide to interact with the Flask service programmatically. This ap
 - Ensure Tautulli is reachable from the app host.
 
 ## Get Recommendations
-Returns a JSON bundle of AI recommendations, availability in your Plex library (via Tautulli), user watch stats, and debug timing.
+Returns a JSON bundle of AI recommendations, availability in your Plex library (via Tautulli), user watch stats, posters (if TMDb is configured), and debug/timing/AI metadata.
 
 - Method: GET
 - Path: `/recommendations`
@@ -41,6 +41,8 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user_i
   "ai_movies_unavailable": ["..."],
   "ai_shows_available": ["AI rec that matched library"],
   "ai_movies_available": ["..."],
+  "show_posters": [{"title": "Title A", "url": "https://...", "source": "tmdb"}],
+  "movie_posters": [{"title": "Movie A", "url": "https://...", "source": "tmdb"}],
   "history_count": 42,
   "debug": {
     "timing": {
@@ -55,6 +57,12 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user_i
     "recent_shows": ["..."],
     "recent_movies": ["..."],
     "gemini_error": null,
+    "genai_sdk": "new",
+    "gemini_model_used": "gemini-2.0-flash-001",
+    "gemini_usage": {"prompt_token_count": 0, "candidates_token_count": 0, "total_token_count": 0},
+    "gemini_usage_today": {"calls": 3, "total_tokens": 12345},
+    "gemini_daily_quota": 200,
+    "gemini_daily_remaining": 197,
     "gemini_prompt": "...",
     "gemini_raw_response": "...",
     "gemini_parsed_json": "{...}",
@@ -78,6 +86,8 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user_i
 Notes:
 - On first call of the day, `library_fetch` may be slower while the local cache is rebuilt from Tautulli.
 - `debug.gemini_error` may contain a message if the AI call failed; other fields will still be populated when possible.
+- Posters are included only if a TMDb API key is configured; sources are labeled (e.g., `tmdb`).
+- Daily model quotas can be configured via `GEMINI_DAILY_QUOTAS` (JSON) to soft-cap usage; see README.
 
 ## Reset/Rebuild Library Cache
 Forces the app to drop the local library cache; the next recommendation call (or page load) will repopulate it from Tautulli.
@@ -122,8 +132,8 @@ $resp.response.data | ConvertTo-Json -Depth 6
 Find the `user_id` field for the desired account and use it with `/recommendations`.
 
 ## UI Endpoints (HTML)
-- `/` main page: user selector + recommendations table
-- `/settings` configure Tautulli and Gemini keys
+- `/` main page: user selector + recommendations table (admin mode) or email/username login (user mode)
+- `/settings` configure Tautulli, Gemini, optional TMDb, and other settings (hidden in user mode)
 
 ## Security and Deployment
 - No built-in auth; deploy behind a firewall/proxy and restrict access.
