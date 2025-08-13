@@ -4,6 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Zoltarr Mobile</title>
+    <!-- Open Graph / Twitter Cards for rich previews -->
+    <meta property="og:title" content="Zoltarr Recommendations" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="{{ request.url }}" />
+    <meta property="og:image" content="{{ url_for('static', filename='ZoltarrBig.png', _external=True) }}" />
+    <meta property="og:description" content="Personalized, history-based Plex recommendations with posters and categories." />
+    <meta property="og:site_name" content="Zoltarr" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Zoltarr Recommendations" />
+    <meta name="twitter:description" content="Personalized, history-based Plex recommendations with posters and categories." />
+    <meta name="twitter:image" content="{{ url_for('static', filename='ZoltarrBig.png', _external=True) }}" />
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <style>
         :root {
