@@ -9,6 +9,7 @@ A lightweight guide to interact with the Flask service programmatically. This ap
 ## Prerequisites
 - Configure settings in the UI at `/settings` (Tautulli URL, Tautulli API Key, Google Gemini API Key).
 - Ensure Tautulli is reachable from the app host.
+ - Optional: Set `USER_MODE=1` in `.env` to enable user mode (hides settings/debug; requires email/username login).
 
 ## Get Recommendations
 Returns a JSON bundle of AI recommendations, availability in your Plex library (via Tautulli), user watch stats, posters (if TMDb is configured), and debug/timing/AI metadata.
@@ -134,6 +135,7 @@ Find the `user_id` field for the desired account and use it with `/recommendatio
 ## UI Endpoints (HTML)
 - `/` main page: user selector + recommendations table (admin mode) or email/username login (user mode)
 - `/settings` configure Tautulli, Gemini, optional TMDb, and other settings (hidden in user mode)
+ - Mobile override: append `?mobile=1` to force the mobile template or `?mobile=0` to force desktop.
 
 ## Security and Deployment
 - No built-in auth; deploy behind a firewall/proxy and restrict access.

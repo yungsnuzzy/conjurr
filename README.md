@@ -34,9 +34,13 @@ Environment/.env keys recognized:
 - TAUTULLI_DB_PATH (optional)
 - TMDB_API_KEY (optional)
 - GEMINI_DAILY_QUOTAS (optional JSON)
+ - USER_MODE (optional: 1 to enable user mode, 0 to disable)
 
 User Mode flag:
-- In `app.py`, set `USER_MODE = 1` to enable user mode (hides settings/debug, requires email/username login, mobile UI auto for phones/tablets).
+- Prefer setting `USER_MODE=1` in your `.env` to enable user mode (hides settings/debug, requires email/username login, auto mobile UI for phones/tablets). You can still set the code default in `app.py` but `.env` wins.
+
+Mobile override:
+- You can force mobile/desktop rendering by adding `?mobile=1` (force mobile) or `?mobile=0` (force desktop) to the URL. This only affects the template choice; app logic is unchanged.
 
 ## Using the app
 1. In admin mode: pick a user from the dropdown and click “Get Recommendations”.

@@ -314,11 +314,11 @@
                 <div class="user-mode-username">Recommendations for {{ user_name }}</div>
             {% endif %}
         {% endif %}
-        {% if recs.show_posters %}
+    {% if recs.show_posters %}
             <div class="poster-box">
                 <div class="poster-section-title">Recommended Shows</div>
                 <div class="poster-row" aria-label="Recommended shows posters">
-                    {% for p in recs.show_posters %}
+            {% for p in recs.show_posters[:9] %}
                         <div class="poster-card" title="{{ p.title }}">
                             <img src="{{ p.url }}" alt="{{ p.title }} poster">
                             <div class="poster-title">{{ p.title }}</div>
@@ -331,7 +331,7 @@
             <div class="poster-box">
                 <div class="poster-section-title">Recommended Movies</div>
                 <div class="poster-row" aria-label="Recommended movies posters">
-                    {% for p in recs.movie_posters %}
+            {% for p in recs.movie_posters[:9] %}
                         <div class="poster-card" title="{{ p.title }}">
                             <img src="{{ p.url }}" alt="{{ p.title }} poster">
                             <div class="poster-title">{{ p.title }}</div>
@@ -384,7 +384,7 @@
             <td>
                 {% if recs.shows %}
                 <ul>
-                    {% for it in recs.shows %}<li>{{ it }}</li>{% endfor %}
+                    {% for it in recs.shows[:9] %}<li>{{ it }}</li>{% endfor %}
                 </ul>
                 {% else %}-{% endif %}
             </td>
@@ -424,7 +424,7 @@
             <td>
                 {% if recs.movies %}
                 <ul>
-                    {% for it in recs.movies %}<li>{{ it }}</li>{% endfor %}
+                    {% for it in recs.movies[:9] %}<li>{{ it }}</li>{% endfor %}
                 </ul>
                 {% else %}-{% endif %}
             </td>

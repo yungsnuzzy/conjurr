@@ -115,7 +115,7 @@
                 <div class="section" aria-label="Recommended shows posters">
                     <h3>Recommended Shows</h3>
                     <div class="grid">
-                        {% for p in recs.show_posters %}
+                        {% for p in recs.show_posters[:9] %}
                             <div class="card" title="{{ p.title }}">
                                 <img src="{{ p.url }}" alt="{{ p.title }} poster" />
                                 <div class="t">{{ p.title }}</div>
@@ -129,7 +129,7 @@
                 <div class="section" aria-label="Recommended movies posters">
                     <h3>Recommended Movies</h3>
                     <div class="grid">
-                        {% for p in recs.movie_posters %}
+                        {% for p in recs.movie_posters[:9] %}
                             <div class="card" title="{{ p.title }}">
                                 <img src="{{ p.url }}" alt="{{ p.title }} poster" />
                                 <div class="t">{{ p.title }}</div>
@@ -166,7 +166,7 @@
                     </tr>
                     <tr>
                         <td>Shows</td>
-                        <td>{% if recs.shows %}<ul>{% for it in recs.shows %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.shows %}<ul>{% for it in recs.shows[:9] %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
                         <td>{% if recs.ai_shows_unavailable %}<ul>{% for it in recs.ai_shows_unavailable %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
                         <td>{% set show_top = recs.ai_shows_titles if recs.ai_shows_titles else recs.ai_shows %}{% if show_top %}<ul>{% for it in show_top %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
                         <td>{% if recs.top_shows %}<ul>{% for it in recs.top_shows %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
@@ -175,7 +175,7 @@
                     </tr>
                     <tr>
                         <td>Movies</td>
-                        <td>{% if recs.movies %}<ul>{% for it in recs.movies %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.movies %}<ul>{% for it in recs.movies[:9] %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
                         <td>{% if recs.ai_movies_unavailable %}<ul>{% for it in recs.ai_movies_unavailable %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
                         <td>{% set movie_top = recs.ai_movies_titles if recs.ai_movies_titles else recs.ai_movies %}{% if movie_top %}<ul>{% for it in movie_top %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
                         <td>{% if recs.top_movies %}<ul>{% for it in recs.top_movies %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
