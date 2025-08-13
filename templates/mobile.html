@@ -116,11 +116,16 @@
             {% if recs.show_posters %}
                 <div class="section" aria-label="Recommended shows posters">
                     <h3>Shows on Plex</h3>
+                    {% if recs.show_posters and recs.show_posters[0].href %}
+                        <div class="note">Tap a poster to open the title in Overseerr.</div>
+                    {% endif %}
                     <div class="grid">
                         {% for p in recs.show_posters[:9] %}
                             <div class="card" title="{{ p.title }}">
+                                {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:block;">{% endif %}
                                 <img src="{{ p.url }}" alt="{{ p.title }} poster" />
                                 <div class="t">{{ p.title }}</div>
+                                {% if p.href %}</a>{% endif %}
                             </div>
                         {% endfor %}
                     </div>
@@ -132,8 +137,10 @@
                     <div class="grid">
                         {% for p in recs.show_posters_unavailable[:9] %}
                             <div class="card" title="{{ p.title }}">
+                                {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:block;">{% endif %}
                                 <img src="{{ p.url }}" alt="{{ p.title }} poster" />
                                 <div class="t">{{ p.title }}</div>
+                                {% if p.href %}</a>{% endif %}
                             </div>
                         {% endfor %}
                     </div>
@@ -146,8 +153,10 @@
                     <div class="grid">
                         {% for p in recs.movie_posters[:9] %}
                             <div class="card" title="{{ p.title }}">
+                                {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:block;">{% endif %}
                                 <img src="{{ p.url }}" alt="{{ p.title }} poster" />
                                 <div class="t">{{ p.title }}</div>
+                                {% if p.href %}</a>{% endif %}
                             </div>
                         {% endfor %}
                     </div>
@@ -159,8 +168,10 @@
                     <div class="grid">
                         {% for p in recs.movie_posters_unavailable[:9] %}
                             <div class="card" title="{{ p.title }}">
+                                {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;display:block;">{% endif %}
                                 <img src="{{ p.url }}" alt="{{ p.title }} poster" />
                                 <div class="t">{{ p.title }}</div>
+                                {% if p.href %}</a>{% endif %}
                             </div>
                         {% endfor %}
                     </div>

@@ -88,6 +88,7 @@ Notes:
 - On first call of the day, `library_fetch` may be slower while the local cache is rebuilt from Tautulli.
 - `debug.gemini_error` may contain a message if the AI call failed; other fields will still be populated when possible.
 - Posters are included only if a TMDb API key is configured; sources are labeled (e.g., `tmdb`).
+- If `OVERSEERR_URL` is configured, poster tiles will link out to the corresponding item page in Overseerr.
 - Daily model quotas can be configured via `GEMINI_DAILY_QUOTAS` (JSON) to soft-cap usage; see README.
 
 ## Reset/Rebuild Library Cache

@@ -52,13 +52,6 @@ Mobile override:
 API usage: see `api_guide.md` for programmatic access to `/recommendations` and `/rebuild_library` with examples and response fields.
 
 ## Features in detail
-- Posters via TMDb: Provide `TMDB_API_KEY` to fetch poster images for recommended titles.
-- Caching: Library items are persisted to `library.db` once per day; daily refresh keeps requests fast.
-- Data sources: Uses Tautulli DB first (if configured) for users/history; falls back to Tautulli API.
-- Gemini models: Tries a shortlist with the new Google GenAI SDK and tracks usage locally; shows model name in the UI.
-- Quotas: Optional local daily quota tracking by model (configure via `GEMINI_DAILY_QUOTAS`).
 
-## TO DO
+ Overseerr (optional) for request links; set OVERSEERR_URL and optionally OVERSEERR_API_KEY. When set, posters link to the item page in Overseerr.
 - Package as a standalone Windows service/EXE.
-- Add optional authentication and CORS configuration for public deployments.
-- Add settings toggle to control user mode and mobile override.

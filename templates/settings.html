@@ -41,6 +41,14 @@
             <input type="password" id="TMDB_API_KEY" name="TMDB_API_KEY" value="{{ settings.TMDB_API_KEY }}" placeholder="Paste your TMDb API key">
             <div class="msg">Used for high-quality posters. Falls back to Tautulli images if not set.</div>
 
+            <label for="OVERSEERR_URL">Overseerr URL (optional)</label>
+            <input type="text" id="OVERSEERR_URL" name="OVERSEERR_URL" value="{{ settings.OVERSEERR_URL }}" placeholder="e.g. http://overseerr.local:5055">
+            <div class="msg">If set, poster clicks will open the matching item page in Overseerr.</div>
+
+            <label for="OVERSEERR_API_KEY">Overseerr API Key (optional)</label>
+            <input type="password" id="OVERSEERR_API_KEY" name="OVERSEERR_API_KEY" value="{{ settings.OVERSEERR_API_KEY }}" placeholder="Paste your Overseerr API key">
+            <div class="msg">Not required for linking, but will enable future features.</div>
+
             <label for="TAUTULLI_DB_PATH">Tautulli DB Path (optional)</label>
             <input type="text" id="TAUTULLI_DB_PATH" name="TAUTULLI_DB_PATH" value="{{ settings.TAUTULLI_DB_PATH }}" placeholder="e.g. %LOCALAPPDATA%/Tautulli/Tautulli.db">
             <div class="msg">If not found automatically, you can upload a copy of your Tautulli.db below.</div>
@@ -80,6 +88,7 @@
             secureField('TAUTULLI_API_KEY');
             secureField('GOOGLE_API_KEY');
             secureField('TMDB_API_KEY');
+            secureField('OVERSEERR_API_KEY');
         })();
     </script>
 </body>

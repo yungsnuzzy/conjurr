@@ -308,6 +308,9 @@
         {% if not tmdb_enabled %}
             <div style="text-align:center;color:#ec1e1e;margin:10px 0 6px 0;">** Add TMDb API key in Settings for content posters **</div>
         {% endif %}
+        {% if recs and recs.show_posters and recs.show_posters[0].href %}
+            <div class="muted-note">Click a poster to open the title in Overseerr.</div>
+        {% endif %}
         {% if user_mode and selected_user %}
             {% set user_name = (selected_user.friendly_name or selected_user.username) if selected_user else None %}
             {% if user_name %}
@@ -328,8 +331,10 @@
                     <div class="poster-row" aria-label="Recommended shows posters">
                         {% for p in recs.show_posters[:9] %}
                         <div class="poster-card" title="{{ p.title }}">
+                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;">{% endif %}
                             <img src="{{ p.url }}" alt="{{ p.title }} poster">
                             <div class="poster-title">{{ p.title }}</div>
+                            {% if p.href %}</a>{% endif %}
                         </div>
                         {% endfor %}
                     </div>
@@ -342,8 +347,10 @@
                     <div class="poster-row" aria-label="Unavailable shows posters">
                         {% for p in recs.show_posters_unavailable[:9] %}
                         <div class="poster-card" title="{{ p.title }}">
+                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;">{% endif %}
                             <img src="{{ p.url }}" alt="{{ p.title }} poster">
                             <div class="poster-title">{{ p.title }}</div>
+                            {% if p.href %}</a>{% endif %}
                         </div>
                         {% endfor %}
                     </div>
@@ -359,8 +366,10 @@
                     <div class="poster-row" aria-label="Recommended movies posters">
                         {% for p in recs.movie_posters[:9] %}
                         <div class="poster-card" title="{{ p.title }}">
+                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;">{% endif %}
                             <img src="{{ p.url }}" alt="{{ p.title }} poster">
                             <div class="poster-title">{{ p.title }}</div>
+                            {% if p.href %}</a>{% endif %}
                         </div>
                         {% endfor %}
                     </div>
@@ -372,8 +381,10 @@
                     <div class="poster-row" aria-label="Unavailable movies posters">
                         {% for p in recs.movie_posters_unavailable[:9] %}
                         <div class="poster-card" title="{{ p.title }}">
+                            {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="color:inherit;text-decoration:none;">{% endif %}
                             <img src="{{ p.url }}" alt="{{ p.title }} poster">
                             <div class="poster-title">{{ p.title }}</div>
+                            {% if p.href %}</a>{% endif %}
                         </div>
                         {% endfor %}
                     </div>
