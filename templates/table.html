@@ -314,30 +314,71 @@
                 <div class="user-mode-username">Recommendations for {{ user_name }}</div>
             {% endif %}
         {% endif %}
-    {% if recs.show_posters %}
-            <div class="poster-box">
-                <div class="poster-section-title">Recommended Shows</div>
-                <div class="poster-row" aria-label="Recommended shows posters">
-            {% for p in recs.show_posters[:9] %}
+        <style>
+            .poster-sections-row { display:flex; gap:14px; flex-wrap:wrap; justify-content:center; align-items:flex-start; }
+            .poster-box.alt { background:#1a1a00; border-color:#6b6b1f; }
+            .poster-box.alt .poster-section-title { color:#ffe066; }
+            .muted-note { color:#ddd08a; font-size:0.9em; text-align:center; margin-top:4px; }
+        </style>
+        {% if recs.show_posters or recs.show_posters_unavailable %}
+            <div class="poster-sections-row">
+                {% if recs.show_posters %}
+                <div class="poster-box">
+                    <div class="poster-section-title">Shows on Plex</div>
+                    <div class="poster-row" aria-label="Recommended shows posters">
+                        {% for p in recs.show_posters[:9] %}
                         <div class="poster-card" title="{{ p.title }}">
                             <img src="{{ p.url }}" alt="{{ p.title }} poster">
                             <div class="poster-title">{{ p.title }}</div>
                         </div>
-                    {% endfor %}
+                        {% endfor %}
+                    </div>
                 </div>
+                
+                {% endif %}
+                {% if recs.show_posters_unavailable %}
+                <div class="poster-box alt">
+                    <div class="poster-section-title">Shows not on Plex... yet</div>
+                    <div class="poster-row" aria-label="Unavailable shows posters">
+                        {% for p in recs.show_posters_unavailable[:9] %}
+                        <div class="poster-card" title="{{ p.title }}">
+                            <img src="{{ p.url }}" alt="{{ p.title }} poster">
+                            <div class="poster-title">{{ p.title }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
         {% endif %}
-        {% if recs.movie_posters %}
-            <div class="poster-box">
-                <div class="poster-section-title">Recommended Movies</div>
-                <div class="poster-row" aria-label="Recommended movies posters">
-            {% for p in recs.movie_posters[:9] %}
+        {% if recs.movie_posters or recs.movie_posters_unavailable %}
+            <div class="poster-sections-row">
+                {% if recs.movie_posters %}
+                <div class="poster-box">
+                    <div class="poster-section-title">Movies on Plex</div>
+                    <div class="poster-row" aria-label="Recommended movies posters">
+                        {% for p in recs.movie_posters[:9] %}
                         <div class="poster-card" title="{{ p.title }}">
                             <img src="{{ p.url }}" alt="{{ p.title }} poster">
                             <div class="poster-title">{{ p.title }}</div>
                         </div>
-                    {% endfor %}
+                        {% endfor %}
+                    </div>
                 </div>
+                {% endif %}
+                {% if recs.movie_posters_unavailable %}
+                <div class="poster-box alt">
+                    <div class="poster-section-title">Movies not on Plex... yet</div>
+                    <div class="poster-row" aria-label="Unavailable movies posters">
+                        {% for p in recs.movie_posters_unavailable[:9] %}
+                        <div class="poster-card" title="{{ p.title }}">
+                            <img src="{{ p.url }}" alt="{{ p.title }} poster">
+                            <div class="poster-title">{{ p.title }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
             </div>
         {% endif %}
         {% if recs.ai_categories %}
@@ -637,7 +678,7 @@
             "Reading fortunes in your watch history...",
             "Asking the oracle (please hold)...",
             "Shuffling fate's deck...",
-            "Zoltar and chill?",
+            "Zoltarr and chill?",
             "Whoops, not that movie...",
             "Uhhh... I mean, how about this one?",
             "Don't yell at the developer",

@@ -52,6 +52,8 @@
         .card { width: 42vw; max-width: 160px; text-align:center; }
         .card img { width:100%; height:auto; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.4); }
         .card .t { margin-top:6px; font-size:0.9rem; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .section.alt { background:#1a1a00; border-color:#6b6b1f; }
+    .note { color:#ddd08a; font-size:0.9rem; text-align:center; margin-top:4px; }
 
         /* Categories ticker */
         .ticker { position:relative; overflow:hidden; width:100%; }
@@ -113,9 +115,22 @@
 
             {% if recs.show_posters %}
                 <div class="section" aria-label="Recommended shows posters">
-                    <h3>Recommended Shows</h3>
+                    <h3>Shows on Plex</h3>
                     <div class="grid">
                         {% for p in recs.show_posters[:9] %}
+                            <div class="card" title="{{ p.title }}">
+                                <img src="{{ p.url }}" alt="{{ p.title }} poster" />
+                                <div class="t">{{ p.title }}</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+            {% if recs.show_posters_unavailable %}
+                <div class="section alt" aria-label="Unavailable shows posters">
+                    <h3>Shows not on Plex... yet</h3>
+                    <div class="grid">
+                        {% for p in recs.show_posters_unavailable[:9] %}
                             <div class="card" title="{{ p.title }}">
                                 <img src="{{ p.url }}" alt="{{ p.title }} poster" />
                                 <div class="t">{{ p.title }}</div>
@@ -127,9 +142,22 @@
 
             {% if recs.movie_posters %}
                 <div class="section" aria-label="Recommended movies posters">
-                    <h3>Recommended Movies</h3>
+                    <h3>Movies on Plex</h3>
                     <div class="grid">
                         {% for p in recs.movie_posters[:9] %}
+                            <div class="card" title="{{ p.title }}">
+                                <img src="{{ p.url }}" alt="{{ p.title }} poster" />
+                                <div class="t">{{ p.title }}</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+            {% if recs.movie_posters_unavailable %}
+                <div class="section alt" aria-label="Unavailable movies posters">
+                    <h3>Movies not on Plex... yet</h3>
+                    <div class="grid">
+                        {% for p in recs.movie_posters_unavailable[:9] %}
                             <div class="card" title="{{ p.title }}">
                                 <img src="{{ p.url }}" alt="{{ p.title }} poster" />
                                 <div class="t">{{ p.title }}</div>
