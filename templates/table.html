@@ -250,7 +250,6 @@
             {% endif %}
             <div class="cta-row">
                 <button class="primary-cta" type="submit">Get Recommendations</button>
-                .user-mode-username { color:#ffe066; font-size:2rem; font-weight:700; text-align:center; padding:10px 0 6px; margin:6px 0 4px; text-shadow: 1px 1px 6px #000; }
             </div>
         {% else %}
             <div class="user-row">
@@ -261,12 +260,6 @@
                         <option value="{{ user.user_id }}" {% if selected_user and user.user_id == selected_user.user_id %}selected{% endif %}>{{ user.friendly_name or user.username }}</option>
                     {% endfor %}
                 {% else %}
-            {% if user_mode and selected_user %}
-                {% set user_name = (selected_user.friendly_name or selected_user.username) if selected_user else None %}
-                {% if user_name %}
-                    <div class="user-mode-username">{{ user_name }}</div>
-                {% endif %}
-            {% endif %}
                     <option disabled selected>No users found</option>
                 {% endif %}
                 </select>
@@ -290,6 +283,7 @@
             .poster-section-title { color:#ffe066; margin: 10px 0 6px 0; font-weight:bold; text-align:center; font-size:1.35em; }
             .poster-box { display:inline-block; background:#1a1a1a; border:1px solid #333; border-radius:12px; padding:12px 14px 16px; box-shadow:0 2px 10px rgba(0,0,0,0.35); margin:14px 0; max-width:100%; }
             .poster-box .poster-section-title { margin: 4px 0 10px 0; }
+            .user-mode-username { color:#ffe066; font-size:2rem; font-weight:700; text-align:center; padding:10px 0 6px; margin:6px 0 4px; text-shadow: 1px 1px 6px #000; }
             /* AI categories ticker */
             .ticker { position: relative; overflow: hidden; width: 100%; }
             .ticker__content { display: inline-flex; align-items: center; gap: 22px; white-space: nowrap; padding: 6px 0; animation: ticker-scroll 35s linear infinite; }
@@ -299,6 +293,12 @@
         </style>
         {% if not tmdb_enabled %}
             <div style="text-align:center;color:#ec1e1e;margin:10px 0 6px 0;">** Add TMDb API key in Settings for content posters **</div>
+        {% endif %}
+        {% if user_mode and selected_user %}
+            {% set user_name = (selected_user.friendly_name or selected_user.username) if selected_user else None %}
+            {% if user_name %}
+                <div class="user-mode-username">Recommendations for {{ user_name }}</div>
+            {% endif %}
         {% endif %}
         {% if recs.show_posters %}
             <div class="poster-box">
