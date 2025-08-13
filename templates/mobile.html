@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Zoltarr Mobile</title>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <style>
+        :root {
+            --bg: #111;
+            --panel: #1a1a1a;
+            --text: #f0eaea;
+            --muted: #bbb;
+            --accent: #ffe066;
+            --border: #333;
+        }
+        html, body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+        .wrap { max-width: 100%; }
+        .topbar { display:flex; align-items:center; justify-content:center; gap:10px; padding:12px 10px 4px; }
+        .topbar img { width:36px; height:36px; }
+        .title { font-weight:700; color:var(--accent); text-shadow: 0 0 8px #000; }
+        .version { display:block; font-size:0.85em; color:#ddd08a; text-align:center; margin-top:2px; }
+
+        /* Form */
+        form { display:flex; flex-direction:column; align-items:center; gap:10px; padding: 6px 12px 10px; }
+        label { color:var(--accent); font-size:1rem; }
+        input[type="text"] { width: 92vw; max-width: 560px; background:#222; color:var(--accent); border:1px solid var(--border); padding:12px 14px; border-radius:8px; font-size:1rem; }
+        .primary-cta { width: 92vw; max-width: 560px; background:var(--accent); color:#222; border:none; padding:14px; border-radius:10px; font-weight:700; font-size:1.05rem; box-shadow:0 2px 10px rgba(0,0,0,0.35); }
+        .err { color:#ff8a8a; font-size:0.95rem; }
+
+        /* Loading overlay */
+        #loading-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.8); z-index:9999; display:none; align-items:center; justify-content:center; }
+        #loading-overlay img { width:120px; height:120px; display:block; }
+        #loading-overlay span { display:block; color:var(--accent); margin-top:10px; text-align:center; }
+
+        /* Posters */
+        .section { display:block; margin: 10px auto; padding: 10px 10px 14px; background: var(--panel); border:1px solid var(--border); border-radius:12px; width: 94vw; max-width: 680px; box-shadow:0 2px 10px rgba(0,0,0,0.35); }
+        .section h3 { color:var(--accent); margin: 2px 0 10px; text-align:center; font-size:1.1rem; }
+        .username { color:var(--accent); text-align:center; font-weight:700; font-size:1.25rem; margin: 2px 0 6px; }
+        .grid { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+        .card { width: 42vw; max-width: 160px; text-align:center; }
+        .card img { width:100%; height:auto; border-radius:10px; box-shadow:0 2px 8px rgba(0,0,0,0.4); }
+        .card .t { margin-top:6px; font-size:0.9rem; color:#ddd; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+        /* Categories ticker */
+        .ticker { position:relative; overflow:hidden; width:100%; }
+        .ticker__content { display:inline-flex; align-items:center; gap:14px; white-space:nowrap; padding:6px 0; animation: ticker 35s linear infinite; }
+        .ticker__item { color:#ddd; font-size:0.9rem; background:#222; border:1px solid var(--border); border-radius:999px; padding:6px 12px; }
+        .ticker:hover .ticker__content { animation-play-state: paused; }
+        @keyframes ticker { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+        /* Table details (collapsible) */
+        .toggle { text-align:center; margin: 6px 0 10px; }
+        .toggle a { color:var(--accent); text-decoration:underline; font-size:0.95rem; }
+        .tbl-wrap { display:none; overflow-x:auto; }
+        table { border-collapse:collapse; width: 94vw; max-width: 680px; margin: 0 auto; background:#222; color:var(--text); font-size: 0.95rem; table-layout: fixed; }
+        th, td { border:1px solid #444; padding:8px; text-align:left; vertical-align:top; word-wrap: break-word; }
+        th { background:#333; color:var(--accent); position:sticky; top:0; }
+        td ul { margin:0; padding-left: 1.1em; max-height: 220px; overflow:auto; }
+
+        /* Banner spacing */
+        .banner-space { height: 4px; }
+    </style>
+</head>
+<body>
+    <div id="loading-overlay">
+        <div>
+            <img id="loading-gif" src="/static/load.gif" alt="Loading..." />
+            <span id="loading-text">Loading Zoltarr's wisdom...</span>
+        </div>
+    </div>
+
+    <div class="wrap">
+        <div class="topbar">
+            <img src="/static/load.gif" alt="Genie" />
+            <div>
+                <div class="title">Zoltarr knows all</div>
+                {% if version %}<div class="version">{{ version }}</div>{% endif %}
+            </div>
+        </div>
+        <div class="banner-space"></div>
+
+        <h2 style="text-align:center; font-size:1.1rem; margin: 4px 0 6px;">History Based User Recommendations</h2>
+
+        <form method="post">
+            <label for="user_login">Enter Plex email or username:</label>
+            <input name="user_login" id="user_login" type="text" placeholder="name@example.com or username" />
+            {% if user_login_error %}
+                <div class="err">{{ user_login_error }}</div>
+            {% endif %}
+            <button class="primary-cta" type="submit">Get Recommendations</button>
+        </form>
+
+        {% if recs %}
+            {% if selected_user %}
+                {% set user_name = (selected_user.friendly_name or selected_user.username) %}
+                {% if user_name %}<div class="username">Recommendations for {{ user_name }}</div>{% endif %}
+            {% endif %}
+
+            {% if recs.show_posters %}
+                <div class="section" aria-label="Recommended shows posters">
+                    <h3>Recommended Shows</h3>
+                    <div class="grid">
+                        {% for p in recs.show_posters %}
+                            <div class="card" title="{{ p.title }}">
+                                <img src="{{ p.url }}" alt="{{ p.title }} poster" />
+                                <div class="t">{{ p.title }}</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if recs.movie_posters %}
+                <div class="section" aria-label="Recommended movies posters">
+                    <h3>Recommended Movies</h3>
+                    <div class="grid">
+                        {% for p in recs.movie_posters %}
+                            <div class="card" title="{{ p.title }}">
+                                <img src="{{ p.url }}" alt="{{ p.title }} poster" />
+                                <div class="t">{{ p.title }}</div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if recs.ai_categories %}
+                <div class="section">
+                    {% set user_name = (selected_user.friendly_name or selected_user.username) if selected_user else None %}
+                    <h3>{{ (user_name ~ "'s") if user_name else 'AI' }} Categories</h3>
+                    <div class="ticker" aria-label="AI Categories ticker">
+                        <div class="ticker__content">
+                            {% for it in recs.ai_categories %}<span class="ticker__item">{{ it }}</span>{% endfor %}
+                            {% for it in recs.ai_categories %}<span class="ticker__item">{{ it }}</span>{% endfor %}
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+
+            <div class="toggle"><a href="#" id="toggle-details">show table details</a></div>
+            <div class="tbl-wrap" id="details-container">
+                <table>
+                    <tr>
+                        <th>Type</th>
+                        <th>Recommendations (Available, Unwatched)</th>
+                        <th>AI Recs Not In Library</th>
+                        <th>AI Top 10</th>
+                        <th>Top 3 Watched</th>
+                        <th>Most Watched</th>
+                        <th>Recently Watched</th>
+                    </tr>
+                    <tr>
+                        <td>Shows</td>
+                        <td>{% if recs.shows %}<ul>{% for it in recs.shows %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.ai_shows_unavailable %}<ul>{% for it in recs.ai_shows_unavailable %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% set show_top = recs.ai_shows_titles if recs.ai_shows_titles else recs.ai_shows %}{% if show_top %}<ul>{% for it in show_top %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.top_shows %}<ul>{% for it in recs.top_shows %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.top_shows %}{{ recs.top_shows[0] }}{% else %}-{% endif %}</td>
+                        <td>{% if recs.debug and recs.debug.recent_shows %}<ul>{% for it in recs.debug.recent_shows %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                    </tr>
+                    <tr>
+                        <td>Movies</td>
+                        <td>{% if recs.movies %}<ul>{% for it in recs.movies %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.ai_movies_unavailable %}<ul>{% for it in recs.ai_movies_unavailable %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% set movie_top = recs.ai_movies_titles if recs.ai_movies_titles else recs.ai_movies %}{% if movie_top %}<ul>{% for it in movie_top %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.top_movies %}<ul>{% for it in recs.top_movies %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                        <td>{% if recs.top_movies %}{{ recs.top_movies[0] }}{% else %}-{% endif %}</td>
+                        <td>{% if recs.debug and recs.debug.recent_movies %}<ul>{% for it in recs.debug.recent_movies %}<li>{{ it }}</li>{% endfor %}</ul>{% else %}-{% endif %}</td>
+                    </tr>
+                </table>
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        // Detect if library is building from server-provided DOM state (present on main template)
+        // Here we keep a simple overlay behavior for submit
+        function randomizeLoading() {
+            var img = document.getElementById('loading-gif');
+            if (!img) return;
+            var gifs = ['/static/load.gif', '/static/load2.gif', '/static/load3.gif'];
+            img.src = gifs[Math.floor(Math.random() * gifs.length)];
+            var phrases = [
+                "Consulting Zoltarr's crystal ball...",
+                "Checking out blockbuster shelves...",
+                "Summoning Zoltarr's ancient wisdom...",
+                "Looking for hidden gems...",
+                "Optimizing the flux capacitor..."
+            ];
+            var el = document.getElementById('loading-text');
+            if (el) el.textContent = phrases[Math.floor(Math.random() * phrases.length)];
+        }
+        window.addEventListener('load', function(){ var o = document.getElementById('loading-overlay'); if (o) o.style.display = 'none'; });
+        document.addEventListener('DOMContentLoaded', function() {
+            var form = document.querySelector('form[method="post"]');
+            if (form) {
+                form.addEventListener('submit', function() {
+                    randomizeLoading();
+                    var overlay = document.getElementById('loading-overlay');
+                    if (overlay) overlay.style.display = 'flex';
+                });
+            }
+            var toggle = document.getElementById('toggle-details');
+            var details = document.getElementById('details-container');
+            if (toggle && details) {
+                toggle.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    var hidden = details.style.display === 'none' || details.style.display === '';
+                    details.style.display = hidden ? 'block' : 'none';
+                    toggle.textContent = hidden ? 'hide table details' : 'show table details';
+                });
+            }
+        });
+    </script>
+</body>
+</html>
