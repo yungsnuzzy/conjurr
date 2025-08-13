@@ -278,7 +278,7 @@
         {% endif %}
         {% if recs.show_posters %}
             <div class="poster-box">
-                <div class="poster-section-title">Shows</div>
+                <div class="poster-section-title">Recommended Shows</div>
                 <div class="poster-row" aria-label="Recommended shows posters">
                     {% for p in recs.show_posters %}
                         <div class="poster-card" title="{{ p.title }}">
@@ -291,7 +291,7 @@
         {% endif %}
         {% if recs.movie_posters %}
             <div class="poster-box">
-                <div class="poster-section-title">Movies</div>
+                <div class="poster-section-title">Recommended Movies</div>
                 <div class="poster-row" aria-label="Recommended movies posters">
                     {% for p in recs.movie_posters %}
                         <div class="poster-card" title="{{ p.title }}">
@@ -304,7 +304,8 @@
         {% endif %}
         {% if recs.ai_categories %}
             <div class="poster-box" style="display:block; width:85%; max-width:980px;">
-                <div class="poster-section-title">AI Categories</div>
+                {% set user_name = (selected_user.friendly_name or selected_user.username) if selected_user else None %}
+                <div class="poster-section-title">{{ (user_name ~ "'s") if user_name else 'AI' }} Categories</div>
                 <div class="ticker" aria-label="AI Categories ticker">
                     <div class="ticker__content">
                         {% for it in recs.ai_categories %}
