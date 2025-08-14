@@ -504,12 +504,22 @@
                 <div class="poster-section-title">{{ (user_name ~ "'s") if user_name else 'AI' }} Categories</div>
                 <div class="ticker" aria-label="AI Categories ticker">
                     <div class="ticker__content">
-                        {% for it in recs.ai_categories %}
-                            <span class="ticker__item">{{ it }}</span>
-                        {% endfor %}
-                        {% for it in recs.ai_categories %}
-                            <span class="ticker__item">{{ it }}</span>
-                        {% endfor %}
+                        {% set cats = category_links if category_links else [] %}
+                        {% if cats and overseerr_url %}
+                            {% for it in cats %}
+                                <a class="ticker__item" style="text-decoration:none;" href="{{ it.url }}" target="_blank" rel="noopener noreferrer">{{ it.label }}</a>
+                            {% endfor %}
+                            {% for it in cats %}
+                                <a class="ticker__item" style="text-decoration:none;" href="{{ it.url }}" target="_blank" rel="noopener noreferrer">{{ it.label }}</a>
+                            {% endfor %}
+                        {% else %}
+                            {% for it in recs.ai_categories %}
+                                <span class="ticker__item">{{ it }}</span>
+                            {% endfor %}
+                            {% for it in recs.ai_categories %}
+                                <span class="ticker__item">{{ it }}</span>
+                            {% endfor %}
+                        {% endif %}
                     </div>
                 </div>
             </div>
