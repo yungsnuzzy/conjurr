@@ -145,7 +145,7 @@
         .cta-row { margin-top: 10px; }
 
     /* Column max-widths: allow auto sizing but cap overly wide columns */
-    /* Col order: 1 Type, 2 Available Recs, 3 Not In Library, 4 AI Top 10, 5 Top 3 Watched, 6 Most Watched, 7 Recent */
+    /* Col order: 1 Type, 2 Available Recs, 3 Not In Library, 4 AI recommendations, 5 Top 3 Watched, 6 Most Watched, 7 Recent */
     table tr > th:nth-child(1),
     table tr > td:nth-child(1) { max-width: 90px; white-space: nowrap; }
 
@@ -157,7 +157,7 @@
     table tr > td:nth-child(3) { max-width: 24rem; }
     table tr > td:nth-child(3) ul { max-width: 24rem; }
 
-    /* AI Top 10 */
+    /* AI Recommendations */
     table tr > td:nth-child(4) { max-width: 22rem; }
     table tr > td:nth-child(4) ul { max-width: 22rem; }
 
@@ -387,18 +387,13 @@
             .muted-note { color:#ddd08a; font-size:0.9em; text-align:center; margin-top:4px; }
         </style>
         {# Movies row (separate) #}
-        {% if recs.display_movie_posters or recs.movie_posters or recs.movie_posters_unavailable %}
-        {% set movie_display = recs.display_movie_posters if recs.display_movie_posters is defined and recs.display_movie_posters else (recs.movie_posters + recs.movie_posters_unavailable) %}
-        {% set movie_avail_titles = recs.movie_posters|map(attribute='title')|list if recs.movie_posters else [] %}
-        {% set movie_display = movie_display[:9] %}
-        {% set movie_display_avail = movie_display | selectattr('title','in', movie_avail_titles) | list %}
-        {% set movie_display_unavail = movie_display | rejectattr('title','in', movie_avail_titles) | list %}
+        {% if recs.movie_posters or recs.movie_posters_unavailable %}
         <div class="poster-sections-row">
-            {% if movie_display_avail %}
+            {% if recs.movie_posters %}
             <div class="poster-box">
                 <div class="poster-section-title">Movies on Plex</div>
                 <div class="poster-row" aria-label="Recommended movies posters">
-                    {% for p in movie_display_avail %}
+                    {% for p in recs.movie_posters[:9] %}
                     <div class="poster-card" title="{{ p.title }}">
                         <div class="poster-overlay-wrap">
                             {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
@@ -420,11 +415,11 @@
                 </div>
             </div>
             {% endif %}
-            {% if movie_display_unavail %}
+            {% if recs.movie_posters_unavailable %}
             <div class="poster-box alt">
                 <div class="poster-section-title">Movies not on Plex... yet</div>
                 <div class="poster-row" aria-label="Unavailable movies posters">
-                    {% for p in movie_display_unavail %}
+                    {% for p in recs.movie_posters_unavailable[:9] %}
                     <div class="poster-card" title="{{ p.title }}">
                         <div class="poster-overlay-wrap">
                             {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
@@ -449,18 +444,13 @@
         </div>
         {% endif %}
         {# Shows row (separate) #}
-        {% if recs.display_show_posters or recs.show_posters or recs.show_posters_unavailable %}
-        {% set show_display = recs.display_show_posters if recs.display_show_posters is defined and recs.display_show_posters else (recs.show_posters + recs.show_posters_unavailable) %}
-        {% set show_avail_titles = recs.show_posters|map(attribute='title')|list if recs.show_posters else [] %}
-        {% set show_display = show_display[:9] %}
-        {% set show_display_avail = show_display | selectattr('title','in', show_avail_titles) | list %}
-        {% set show_display_unavail = show_display | rejectattr('title','in', show_avail_titles) | list %}
+        {% if recs.show_posters or recs.show_posters_unavailable %}
         <div class="poster-sections-row">
-            {% if show_display_avail %}
+            {% if recs.show_posters %}
             <div class="poster-box">
                 <div class="poster-section-title">Shows on Plex</div>
                 <div class="poster-row" aria-label="Recommended shows posters">
-                    {% for p in show_display_avail %}
+                    {% for p in recs.show_posters[:9] %}
                     <div class="poster-card" title="{{ p.title }}">
                         <div class="poster-overlay-wrap">
                             {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
@@ -482,11 +472,11 @@
                 </div>
             </div>
             {% endif %}
-            {% if show_display_unavail %}
+            {% if recs.show_posters_unavailable %}
             <div class="poster-box alt">
                 <div class="poster-section-title">Shows not on Plex... yet</div>
                 <div class="poster-row" aria-label="Unavailable shows posters">
-                    {% for p in show_display_unavail %}
+                    {% for p in recs.show_posters_unavailable[:9] %}
                     <div class="poster-card" title="{{ p.title }}">
                         <div class="poster-overlay-wrap">
                             {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
@@ -555,7 +545,7 @@
             <th>Type</th>
             <th>Recommendations (Available, Unwatched)</th>
             <th>AI Recs Not In Library (Unwatched)</th>
-            <th>AI Top 10 Recommendations</th>
+            <th>AI Recommendations</th>
             <th>Top 3 Watched</th>
             <th>Most Watched</th>
             <th>Recently Watched</th>
@@ -744,8 +734,8 @@
             <div>All shows in library: {{ recs.debug.all_shows_count }}</div>
             <div>All movies in library: {{ recs.debug.all_movies_count }}</div>
             <div>Watched set count: {{ recs.debug.watched_set_count }}</div>
-            <div>Gemini AI Top 10 Shows: {{ recs.debug.gemini_ai_shows|join(', ') }}</div>
-            <div>Gemini AI Top 10 Movies: {{ recs.debug.gemini_ai_movies|join(', ') }}</div>
+            <div>Gemini AI Shows: {{ recs.debug.gemini_ai_shows|join(', ') }}</div>
+            <div>Gemini AI Movies: {{ recs.debug.gemini_ai_movies|join(', ') }}</div>
             <div>Gemini AI Shows Available in Library: {{ recs.debug.gemini_ai_shows_available|join(', ') }}</div>
             <div>Gemini AI Movies Available in Library: {{ recs.debug.gemini_ai_movies_available|join(', ') }}</div>
             <div>Show section IDs: {{ recs.debug.show_section_ids }}</div>

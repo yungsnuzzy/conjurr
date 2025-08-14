@@ -103,51 +103,11 @@
                 <div class="hint">Adds high-quality posters, overview text, runtime & vote averages.</div>
             </div>
             <div class="field">
-                <label for="OVERSEERR_URL">Overseerr URL <span class="inline-badge">Optional</span></label>
-                <input type="text" id="OVERSEERR_URL" name="OVERSEERR_URL" value="{{ settings.OVERSEERR_URL }}" placeholder="http://overseerr.local:5055">
-                <div class="hint">If set, poster clicks open the item in Overseerr Discover/Details.</div>
-            </div>
-            <div class="field">
                 <label for="OVERSEERR_API_KEY">Overseerr API Key <span class="inline-badge">Optional</span></label>
                 <input type="password" id="OVERSEERR_API_KEY" name="OVERSEERR_API_KEY" value="{{ settings.OVERSEERR_API_KEY }}" placeholder="Paste your Overseerr API key">
-                <div class="hint">Not required for deep links; enables future authenticated Overseerr features.</div>
+                <div class="hint">Not required for deep links; enables potential future authenticated Overseerr features.</div>
             </div>
-            <div class="field">
-                <label for="PLEX_URL">Plex URL <span class="inline-badge">Optional</span></label>
-                <input type="text" id="PLEX_URL" name="PLEX_URL" value="{{ settings.PLEX_URL }}" placeholder="http://plex.local:32400">
-                <div class="hint">Enables direct Plex library inventory (hybrid: Tautulli still supplies history). No trailing slash.</div>
-            </div>
-            <div class="field">
-                <label for="PLEX_TOKEN">Plex Token <span class="inline-badge">Optional</span></label>
-                <input type="password" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ settings.PLEX_TOKEN }}" placeholder="X-Plex-Token value">
-                <div class="hint">Find via Plex Web (network inspector) or an existing client. Stored locally in .env.</div>
-            </div>
-        </div>
-
-        <h3>Library Inclusion Filter</h3>
-        <div class="field" style="margin-top:6px;">
-            <div class="hint" style="margin-bottom:10px;">Select which Tautulli libraries to consider when matching AI recommendations & availability. Leave all unchecked to include every movie/show library. (Section IDs persist in <code>TAUTULLI_INCLUDE_LIBRARIES</code>)</div>
-            <div style="display:flex; flex-wrap:wrap; gap:10px; background:#151515; padding:14px 16px 10px; border:1px solid #2b2b2b; border-radius:12px; max-height:260px; overflow:auto;">
-                {% if libraries %}
-                    {% for lib in libraries %}
-                        {% set sid = lib.section_id or lib.section_id %}
-                        <label style="display:flex; align-items:center; gap:6px; font-size:.68rem; background:#242424; padding:6px 10px 6px; border-radius:8px; cursor:pointer; border:1px solid #333;">
-                            <input type="checkbox" name="INCLUDE_LIBRARY" value="{{ lib.section_id }}" {% if lib.section_id|string in include_set %}checked{% endif %} style="margin:0; width:14px; height:14px; accent-color:#ffc94d;">
-                            <span style="font-weight:600; letter-spacing:.05em;">{{ lib.section_name }}</span>
-                            <span style="opacity:.6;">#{{ lib.section_id }}</span>
-                            <span style="opacity:.55; font-style:italic;">{{ lib.section_type }}</span>
-                        </label>
-                    {% endfor %}
-                {% else %}
-                    <div style="font-size:.7rem; opacity:.7;">No libraries fetched yet. Provide valid Tautulli settings above & save to populate.</div>
-                {% endif %}
-            </div>
-            {% if settings.TAUTULLI_INCLUDE_LIBRARIES %}
-            <div class="hint" style="margin-top:8px;">Active filter: {{ settings.TAUTULLI_INCLUDE_LIBRARIES }}</div>
-            {% else %}
-            <div class="hint" style="margin-top:8px;">No filter active (all movie/show libraries included).</div>
-            {% endif %}
-        </div>
+    </div>
 
         <button type="submit" id="save-btn">Save Settings</button>
     </form>
