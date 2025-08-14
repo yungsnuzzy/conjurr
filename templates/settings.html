@@ -4,62 +4,173 @@
     <meta charset="UTF-8">
     <title>Zoltarr Settings</title>
     <style>
-        body { background: #111; color: #ffe066; font-family: Arial, sans-serif; }
-        .settings-container { max-width: 400px; margin: 60px auto; background: #222; padding: 32px 24px; border-radius: 12px; box-shadow: 0 0 16px #0008; }
-        label { display: block; margin-top: 18px; font-weight: bold; }
-        input[type=text], input[type=password] { width: 100%; padding: 8px; background: #181818; color: #ffe066; border: 1px solid #444; border-radius: 4px; }
-        button { margin-top: 24px; background: #ffe066; color: #222; border: none; padding: 10px 24px; border-radius: 4px; font-weight: bold; cursor: pointer; }
-        .missing { color: #ff6666; font-size: 0.95em; }
-    .msg { margin-top: 10px; font-size: 1.1em; }
-    .msg.success { color: #66ff99; }
-    .msg.error { color: #ff6666; }
-        .back-link { color: #ffe066; text-decoration: underline; display: block; margin-top: 24px; }
+        body { background:#101010; color:#f5dc7a; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; line-height:1.35; }
+        a { color:#ffd84d; }
+        h2,h3 { margin:0 0 8px; font-weight:600; }
+        h3 { margin-top:32px; font-size:1.05rem; letter-spacing:.5px; text-transform:uppercase; color:#ffc94d; }
+        .settings-container { max-width: 820px; margin:56px auto 80px; background:#1d1d1d; padding:42px 46px 54px; border-radius:18px; box-shadow:0 8px 28px -6px #000, 0 0 0 1px #2c2c2c inset; position:relative; }
+        .grid { display:grid; gap:26px 34px; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); margin-top:8px; }
+        .field { position:relative; }
+        label { display:flex; align-items:center; font-weight:600; font-size:.78rem; letter-spacing:.1em; text-transform:uppercase; opacity:.9; margin-bottom:6px; }
+        label span.required { color:#ff6363; margin-left:6px; font-weight:700; }
+        input[type=text], input[type=password] { width:100%; padding:10px 12px 9px; background:#141414; color:#ffe89c; border:1px solid #353535; border-radius:8px; font-size:.92rem; font-family:inherit; transition:.18s border, .18s background; }
+        input[type=text]:focus, input[type=password]:focus { outline:none; border-color:#ffc947; background:#181818; box-shadow:0 0 0 1px #ffc947; }
+        input[disabled] { opacity:.55; cursor:not-allowed; }
+        .hint { font-size:.7rem; margin-top:6px; color:#d0c396; letter-spacing:.03em; line-height:1.25; }
+        .hint code { background:#252525; padding:1px 5px 2px; border-radius:4px; font-size:.68rem; color:#ffecb3; }
+        .section-note { font-size:.72rem; margin-top:-4px; color:#b5a978; }
+        .msg { margin-top:4px; font-size:.78rem; }
+        .msg.success { color:#67ff9d; }
+        .msg.error { color:#ff6363; }
+        button { margin-top:34px; background:linear-gradient(90deg,#ffd54f,#ffc107); color:#1a1500; border:none; padding:14px 30px; border-radius:10px; font-weight:600; cursor:pointer; font-size:.9rem; letter-spacing:.05em; box-shadow:0 3px 10px -2px #0009, 0 0 0 1px #dca72a inset; transition:.2s transform,.25s box-shadow; }
+        button:hover { box-shadow:0 5px 18px -4px #000,0 0 0 1px #ffce3b inset; }
+        button:active { transform:translateY(1px); }
+        .back-link { text-decoration:none; display:inline-flex; align-items:center; gap:6px; margin-top:36px; font-size:.78rem; text-transform:uppercase; letter-spacing:.15em; opacity:.85; }
+        .back-link:hover { opacity:1; }
+        .pill-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+        .pill { background:#262626; padding:6px 10px 5px; border-radius:999px; font-size:.65rem; letter-spacing:.08em; display:inline-flex; align-items:center; gap:6px; line-height:1; border:1px solid #343434; }
+        .pill.ok { border-color:#375e2d; background:#1d2a1b; color:#97e077; }
+        .pill.no { border-color:#5f2c2c; background:#2a1c1c; color:#ff8686; }
+        .pill small { font-size:.55rem; opacity:.85; }
+        table.features { width:100%; border-collapse:separate; border-spacing:0 6px; margin-top:14px; }
+        table.features td { padding:10px 14px; background:#151515; font-size:.68rem; vertical-align:top; line-height:1.25; border-radius:10px; border:1px solid #262626; }
+        table.features td:first-child { width:178px; font-weight:600; letter-spacing:.08em; color:#ffe07d; }
+        td.yes { color:#8aff84; }
+        td.no { color:#ff8080; }
+        .group-title { margin-top:34px; font-size:.74rem; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:#ffdd71; display:flex; align-items:center; gap:8px; }
+        .divider { height:1px; background:linear-gradient(90deg,transparent,#444,transparent); margin:34px 0 6px; border:none; }
+        .inline-badge { background:#303030; padding:3px 7px 4px; border-radius:6px; font-size:.55rem; letter-spacing:.08em; text-transform:uppercase; color:#fbd777; }
+        .two-col { columns:2 320px; column-gap:34px; }
+        @media (max-width:860px){ .settings-container{padding:38px 32px 50px;} table.features td:first-child{width:140px;} }
+        @media (max-width:620px){ .two-col{columns:1;} }
     </style>
 </head>
 <body>
     <div class="settings-container">
-        <h2>Zoltarr Settings</h2>
+        <h2 style="font-size:1.85rem; letter-spacing:.03em; font-weight:650;">Zoltarr Settings</h2>
+        <div class="section-note" style="margin-bottom:18px; max-width:680px;">Configure core data sources, AI model behavior, and optional integrations. Fields show contextual hints; the Feature Activation matrix below updates after save.</div>
         {% if message %}
             <div class="msg{% if message_type %} {{ message_type }}{% endif %}">
                 {{ message|safe }}
             </div>
         {% endif %}
     <form method="post" id="settings-form" autocomplete="off" enctype="multipart/form-data">
-            <label for="TAUTULLI_URL">Tautulli URL {% if 'TAUTULLI_URL' in missing %}<span class="missing">(required)</span>{% endif %}</label>
-            <input type="text" id="TAUTULLI_URL" name="TAUTULLI_URL" value="{{ settings.TAUTULLI_URL }}" required>
-            <span id="tautulli-url-status" class="msg"></span>
+        <h3>Core Tautulli Connection</h3>
+        <div class="grid">
+            <div class="field">
+                <label for="TAUTULLI_URL">Tautulli URL {% if 'TAUTULLI_URL' in missing %}<span class="required">REQ</span>{% endif %}</label>
+                <input type="text" id="TAUTULLI_URL" name="TAUTULLI_URL" value="{{ settings.TAUTULLI_URL }}" required>
+                <div class="hint">Base URL to your Tautulli instance (no trailing slash). Example: <code>http://localhost:8181</code></div>
+            </div>
+            <div class="field">
+                <label for="TAUTULLI_API_KEY">Tautulli API Key {% if 'TAUTULLI_API_KEY' in missing %}<span class="required">REQ</span>{% endif %}</label>
+                <input type="password" id="TAUTULLI_API_KEY" name="TAUTULLI_API_KEY" value="{{ settings.TAUTULLI_API_KEY }}" required>
+                <div class="hint">Generate in Tautulli: Settings → Web Interface → API.</div>
+            </div>
+            <div class="field" style="grid-column:1 / -1;">
+                <label for="TAUTULLI_DB_PATH">Tautulli DB Path <span class="inline-badge">Optional</span></label>
+                <input type="text" id="TAUTULLI_DB_PATH" name="TAUTULLI_DB_PATH" value="{{ settings.TAUTULLI_DB_PATH }}" placeholder="e.g. %LOCALAPPDATA%/Tautulli/Tautulli.db">
+                <div class="hint">Enables full watch history + faster library availability. Auto-detected on Windows if left blank.</div>
+                <input style="margin-top:10px" type="file" id="TAUTULLI_DB_FILE" name="TAUTULLI_DB_FILE" accept=".db,.sqlite,.sqlite3">
+                <div class="hint">Upload a copy if remote. Refresh periodically to reflect new items.</div>
+            </div>
+        </div>
 
-            <label for="TAUTULLI_API_KEY">Tautulli API Key {% if 'TAUTULLI_API_KEY' in missing %}<span class="missing">(required)</span>{% endif %}</label>
-            <input type="password" id="TAUTULLI_API_KEY" name="TAUTULLI_API_KEY" value="{{ settings.TAUTULLI_API_KEY }}" required>
-            <span id="tautulli-key-status" class="msg"></span>
+        <h3>AI / Gemini</h3>
+        <div class="grid">
+            <div class="field">
+                <label for="GOOGLE_API_KEY">Gemini API Key {% if 'GOOGLE_API_KEY' in missing %}<span class="required">REQ</span>{% endif %}</label>
+                <input type="password" id="GOOGLE_API_KEY" name="GOOGLE_API_KEY" value="{{ settings.GOOGLE_API_KEY }}" required>
+                <div class="hint">Used for per-user personalized recommendations.</div>
+            </div>
+            <div class="field">
+                <label for="GEMINI_MODEL">Preferred Model <span class="inline-badge">Optional</span></label>
+                <input type="text" id="GEMINI_MODEL" name="GEMINI_MODEL" value="{{ settings.GEMINI_MODEL }}" placeholder="gemini-2.5-flash-lite">
+                <div class="hint">Overrides default model order. Examples: <code>gemini-2.5-flash-lite</code>, <code>gemini-2.5-flash</code>.</div>
+            </div>
+            <div class="field" style="grid-column:1 / -1;">
+                <label for="GEMINI_DAILY_QUOTAS">Daily Quotas JSON <span class="inline-badge">Optional</span></label>
+                <input type="text" id="GEMINI_DAILY_QUOTAS" name="GEMINI_DAILY_QUOTAS" placeholder='{"gemini-2.5-flash-lite": 150}' value="{{ settings.GEMINI_DAILY_QUOTAS }}">
+                <div class="hint">Map model → max calls per day. Enforced locally. Example: <code>{"gemini-2.5-flash-lite": 150}</code></div>
+            </div>
+        </div>
 
-            <label for="GOOGLE_API_KEY">Google Gemini API Key {% if 'GOOGLE_API_KEY' in missing %}<span class="missing">(required)</span>{% endif %}</label>
-            <input type="password" id="GOOGLE_API_KEY" name="GOOGLE_API_KEY" value="{{ settings.GOOGLE_API_KEY }}" required>
-            <span id="gemini-key-status" class="msg"></span>
+        <h3>Integrations</h3>
+        <div class="grid">
+            <div class="field">
+                <label for="TMDB_API_KEY">TMDb API Key <span class="inline-badge">Optional</span></label>
+                <input type="password" id="TMDB_API_KEY" name="TMDB_API_KEY" value="{{ settings.TMDB_API_KEY }}" placeholder="Paste your TMDb API key">
+                <div class="hint">Adds high-quality posters, overview text, runtime & vote averages.</div>
+            </div>
+            <div class="field">
+                <label for="OVERSEERR_URL">Overseerr URL <span class="inline-badge">Optional</span></label>
+                <input type="text" id="OVERSEERR_URL" name="OVERSEERR_URL" value="{{ settings.OVERSEERR_URL }}" placeholder="http://overseerr.local:5055">
+                <div class="hint">If set, poster clicks open the item in Overseerr Discover/Details.</div>
+            </div>
+            <div class="field">
+                <label for="OVERSEERR_API_KEY">Overseerr API Key <span class="inline-badge">Optional</span></label>
+                <input type="password" id="OVERSEERR_API_KEY" name="OVERSEERR_API_KEY" value="{{ settings.OVERSEERR_API_KEY }}" placeholder="Paste your Overseerr API key">
+                <div class="hint">Not required for deep links; enables future authenticated Overseerr features.</div>
+            </div>
+            <div class="field">
+                <label for="PLEX_URL">Plex URL <span class="inline-badge">Optional</span></label>
+                <input type="text" id="PLEX_URL" name="PLEX_URL" value="{{ settings.PLEX_URL }}" placeholder="http://plex.local:32400">
+                <div class="hint">Enables direct Plex library inventory (hybrid: Tautulli still supplies history). No trailing slash.</div>
+            </div>
+            <div class="field">
+                <label for="PLEX_TOKEN">Plex Token <span class="inline-badge">Optional</span></label>
+                <input type="password" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ settings.PLEX_TOKEN }}" placeholder="X-Plex-Token value">
+                <div class="hint">Find via Plex Web (network inspector) or an existing client. Stored locally in .env.</div>
+            </div>
+        </div>
 
-            <label for="TMDB_API_KEY">TMDb API Key (optional)</label>
-            <input type="password" id="TMDB_API_KEY" name="TMDB_API_KEY" value="{{ settings.TMDB_API_KEY }}" placeholder="Paste your TMDb API key">
-            <div class="msg">Used for high-quality posters. Falls back to Tautulli images if not set.</div>
+        <h3>Library Inclusion Filter</h3>
+        <div class="field" style="margin-top:6px;">
+            <div class="hint" style="margin-bottom:10px;">Select which Tautulli libraries to consider when matching AI recommendations & availability. Leave all unchecked to include every movie/show library. (Section IDs persist in <code>TAUTULLI_INCLUDE_LIBRARIES</code>)</div>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; background:#151515; padding:14px 16px 10px; border:1px solid #2b2b2b; border-radius:12px; max-height:260px; overflow:auto;">
+                {% if libraries %}
+                    {% for lib in libraries %}
+                        {% set sid = lib.section_id or lib.section_id %}
+                        <label style="display:flex; align-items:center; gap:6px; font-size:.68rem; background:#242424; padding:6px 10px 6px; border-radius:8px; cursor:pointer; border:1px solid #333;">
+                            <input type="checkbox" name="INCLUDE_LIBRARY" value="{{ lib.section_id }}" {% if lib.section_id|string in include_set %}checked{% endif %} style="margin:0; width:14px; height:14px; accent-color:#ffc94d;">
+                            <span style="font-weight:600; letter-spacing:.05em;">{{ lib.section_name }}</span>
+                            <span style="opacity:.6;">#{{ lib.section_id }}</span>
+                            <span style="opacity:.55; font-style:italic;">{{ lib.section_type }}</span>
+                        </label>
+                    {% endfor %}
+                {% else %}
+                    <div style="font-size:.7rem; opacity:.7;">No libraries fetched yet. Provide valid Tautulli settings above & save to populate.</div>
+                {% endif %}
+            </div>
+            {% if settings.TAUTULLI_INCLUDE_LIBRARIES %}
+            <div class="hint" style="margin-top:8px;">Active filter: {{ settings.TAUTULLI_INCLUDE_LIBRARIES }}</div>
+            {% else %}
+            <div class="hint" style="margin-top:8px;">No filter active (all movie/show libraries included).</div>
+            {% endif %}
+        </div>
 
-            <label for="OVERSEERR_URL">Overseerr URL (optional)</label>
-            <input type="text" id="OVERSEERR_URL" name="OVERSEERR_URL" value="{{ settings.OVERSEERR_URL }}" placeholder="e.g. http://overseerr.local:5055">
-            <div class="msg">If set, poster clicks will open the matching item page in Overseerr.</div>
+        <button type="submit" id="save-btn">Save Settings</button>
+    </form>
 
-            <label for="OVERSEERR_API_KEY">Overseerr API Key (optional)</label>
-            <input type="password" id="OVERSEERR_API_KEY" name="OVERSEERR_API_KEY" value="{{ settings.OVERSEERR_API_KEY }}" placeholder="Paste your Overseerr API key">
-            <div class="msg">Not required for linking, but will enable future features.</div>
-
-            <label for="TAUTULLI_DB_PATH">Tautulli DB Path (optional)</label>
-            <input type="text" id="TAUTULLI_DB_PATH" name="TAUTULLI_DB_PATH" value="{{ settings.TAUTULLI_DB_PATH }}" placeholder="e.g. %LOCALAPPDATA%/Tautulli/Tautulli.db">
-            <div class="msg">If not found automatically, you can upload a copy of your Tautulli.db below. **WILL NEED UPDATED OVER TIME TO REFLECT CHANGES** </div>
-            <input type="file" id="TAUTULLI_DB_FILE" name="TAUTULLI_DB_FILE" accept=".db,.sqlite,.sqlite3">
-
-            <label for="GEMINI_DAILY_QUOTAS">Gemini Daily Quotas (optional)</label>
-            <input type="text" id="GEMINI_DAILY_QUOTAS" name="GEMINI_DAILY_QUOTAS" placeholder='{"gemini-2.0-flash-001": 200}' value="{{ settings.GEMINI_DAILY_QUOTAS }}">
-            <div class="msg">JSON map of model -> daily call quota. Example: {"gemini-2.0-flash-001": 200}</div>
-
-            <button type="submit" id="save-btn">Save Settings</button>
-        </form>
+    <div class="divider"></div>
+    <h3>Feature Activation</h3>
+    <div class="pill-row">
+        {% for f in feature_summary %}
+            <div class="pill {% if f.enabled %}ok{% else %}no{% endif %}">
+                {{ f.name }} {% if f.enabled %}<small>ON</small>{% else %}<small>OFF</small>{% endif %}
+            </div>
+        {% endfor %}
+    </div>
+    <table class="features">
+        <tbody>
+        {% for f in feature_summary %}
+            <tr>
+                <td>{{ f.name }}</td>
+                <td class="{% if f.enabled %}yes{% else %}no{% endif %}">{{ f.desc }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
         <a class="back-link" href="/">&larr; Back to Recommendations</a>
     <!-- No live validation: validation will occur on form submit only -->
     </div>

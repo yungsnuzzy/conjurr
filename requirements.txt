@@ -1,6 +1,32 @@
-Flask
-requests
-rapidfuzz
-python-dotenv
-google-genai
-google-generativeai
+############################################################
+# Runtime Dependencies for ZOLTARR
+# Pins use compatible release (PEP 440 ~) where practical.
+# Adjust versions if your environment requires newer patches.
+############################################################
+
+# Web framework & templating
+Flask>=2.3,<4
+
+# HTTP client
+requests>=2.31,<3
+
+# Fuzzy matching for title resolution
+rapidfuzz>=3.6,<4
+
+# Environment variable management
+python-dotenv>=1.0,<2
+
+# Google Gemini (new SDK). Install succeeds only on supported Python versions.
+google-genai>=0.3.0
+
+# Legacy Gemini SDK fallback (kept for backward compatibility)
+google-generativeai>=0.7.0
+
+# Optional: production WSGI server (uncomment if deploying behind Gunicorn)
+# gunicorn>=21.2
+
+# Optional: typing backports / forward compatibility (safe no-op if stdlib covers)
+typing-extensions>=4.9
+
+# NOTE: All other modules used (sqlite3, concurrent.futures, collections, etc.)
+# are part of the Python standard library and don't need entries here.

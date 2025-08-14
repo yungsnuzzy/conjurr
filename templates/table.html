@@ -179,7 +179,7 @@
     {% endif %}
     {% if not user_mode %}
     <div class="debug-toggle">
-        <input type="checkbox" id="toggle-debug" style="width:18px;height:18px;">
+        <input type="checkbox" id="toggle-debug" style="width:18px;height:18px;" {% if not user_mode %}checked{% endif %}>
         <label for="toggle-debug">Show Debug Info</label>
     </div>
     {% endif %}
@@ -212,14 +212,17 @@
     {% if user_config_status and user_config_status|length > 0 %}
     <div style="position:absolute;top:130px;left:18px;z-index:10;background:#222;padding:14px 18px;border-radius:10px;box-shadow:0 0 10px #0008;min-width:260px;">
         <div style="font-weight:bold;margin-bottom:6px;color:#ffe066;">Configuration Status</div>
-        <ul style="list-style:none;margin:0;padding:0;font-size:0.85em;line-height:1.5;">
+        <ul style="list-style:none;margin:0;padding:0;font-size:0.85em;line-height:1.5;max-width:260px;">
             {% for it in user_config_status %}
-            <li style="display:flex;align-items:center;gap:6px;">
+            <li class="config-status-item{% if 'Library Filter:' in it.name %} config-status-libs{% endif %}" style="display:flex;align-items:flex-start;gap:6px;">
                 <span style="width:18px;text-align:center;">{% if it.ok %}✅{% else %}❌{% endif %}</span>
                 <span {% if not it.ok %}style="color:#ff8888;"{% endif %}>{{ it.name }}</span>
             </li>
             {% endfor %}
         </ul>
+        <style>
+            .config-status-item.config-status-libs { margin-top:4px; padding-top:4px; border-top:1px solid #333; }
+        </style>
     </div>
     {% endif %}
     <form method="post" style="text-align:center; margin-bottom:20px;">
@@ -384,13 +387,18 @@
             .muted-note { color:#ddd08a; font-size:0.9em; text-align:center; margin-top:4px; }
         </style>
         {# Movies row (separate) #}
-        {% if recs.movie_posters or recs.movie_posters_unavailable %}
+        {% if recs.display_movie_posters or recs.movie_posters or recs.movie_posters_unavailable %}
+        {% set movie_display = recs.display_movie_posters if recs.display_movie_posters is defined and recs.display_movie_posters else (recs.movie_posters + recs.movie_posters_unavailable) %}
+        {% set movie_avail_titles = recs.movie_posters|map(attribute='title')|list if recs.movie_posters else [] %}
+        {% set movie_display = movie_display[:9] %}
+        {% set movie_display_avail = movie_display | selectattr('title','in', movie_avail_titles) | list %}
+        {% set movie_display_unavail = movie_display | rejectattr('title','in', movie_avail_titles) | list %}
         <div class="poster-sections-row">
-            {% if recs.movie_posters %}
+            {% if movie_display_avail %}
             <div class="poster-box">
                 <div class="poster-section-title">Movies on Plex</div>
                 <div class="poster-row" aria-label="Recommended movies posters">
-                    {% for p in recs.movie_posters[:9] %}
+                    {% for p in movie_display_avail %}
                     <div class="poster-card" title="{{ p.title }}">
                         <div class="poster-overlay-wrap">
                             {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
@@ -412,11 +420,11 @@
                 </div>
             </div>
             {% endif %}
-            {% if recs.movie_posters_unavailable %}
+            {% if movie_display_unavail %}
             <div class="poster-box alt">
                 <div class="poster-section-title">Movies not on Plex... yet</div>
                 <div class="poster-row" aria-label="Unavailable movies posters">
-                    {% for p in recs.movie_posters_unavailable[:9] %}
+                    {% for p in movie_display_unavail %}
                     <div class="poster-card" title="{{ p.title }}">
                         <div class="poster-overlay-wrap">
                             {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
@@ -441,13 +449,18 @@
         </div>
         {% endif %}
         {# Shows row (separate) #}
-        {% if recs.show_posters or recs.show_posters_unavailable %}
+        {% if recs.display_show_posters or recs.show_posters or recs.show_posters_unavailable %}
+        {% set show_display = recs.display_show_posters if recs.display_show_posters is defined and recs.display_show_posters else (recs.show_posters + recs.show_posters_unavailable) %}
+        {% set show_avail_titles = recs.show_posters|map(attribute='title')|list if recs.show_posters else [] %}
+        {% set show_display = show_display[:9] %}
+        {% set show_display_avail = show_display | selectattr('title','in', show_avail_titles) | list %}
+        {% set show_display_unavail = show_display | rejectattr('title','in', show_avail_titles) | list %}
         <div class="poster-sections-row">
-            {% if recs.show_posters %}
+            {% if show_display_avail %}
             <div class="poster-box">
                 <div class="poster-section-title">Shows on Plex</div>
                 <div class="poster-row" aria-label="Recommended shows posters">
-                    {% for p in recs.show_posters[:9] %}
+                    {% for p in show_display_avail %}
                     <div class="poster-card" title="{{ p.title }}">
                         <div class="poster-overlay-wrap">
                             {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
@@ -469,11 +482,11 @@
                 </div>
             </div>
             {% endif %}
-            {% if recs.show_posters_unavailable %}
+            {% if show_display_unavail %}
             <div class="poster-box alt">
                 <div class="poster-section-title">Shows not on Plex... yet</div>
                 <div class="poster-row" aria-label="Unavailable shows posters">
-                    {% for p in recs.show_posters_unavailable[:9] %}
+                    {% for p in show_display_unavail %}
                     <div class="poster-card" title="{{ p.title }}">
                         <div class="poster-overlay-wrap">
                             {% if p.href %}<a href="{{ p.href }}" target="_blank" rel="noopener noreferrer" style="display:block;width:100%;height:100%;position:absolute;inset:0;z-index:5;">&nbsp;</a>{% endif %}
@@ -664,8 +677,8 @@
                 <ul>
                     <li>User history fetch: {{ recs.debug.timing.user_history|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.user_history is not none else 'N/A' }}</li>
                     <li>Top watched calc: {{ recs.debug.timing.top_watched|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.top_watched is not none else 'N/A' }}</li>
-                    <li>Library fetch: {{ recs.debug.timing.library_fetch|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.library_fetch is not none else 'N/A' }}</li>
-                    <li>Unwatched filter: {{ recs.debug.timing.unwatched_filter|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.unwatched_filter is not none else 'N/A' }}</li>
+                    <li>Library fetch: {% if recs and recs.debug and recs.debug.timing and recs.debug.timing.library_fetch is not none and recs.debug.timing.library_fetch is number %}{{ recs.debug.timing.library_fetch|round(2) }}{% elif recs and recs.debug and recs.debug.timing and recs.debug.timing.library_fetch is not none %}{{ recs.debug.timing.library_fetch }}{% else %}N/A{% endif %}</li>
+                    <li>Unwatched filter: (deprecated)</li>
                     <li>Gemini call: {% if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none and recs.debug.timing.gemini is number %}{{ recs.debug.timing.gemini|round(2) }}{% else %}{{ recs.debug.timing.gemini if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none else 'N/A' }}{% endif %}</li>
                     <li>AI parse: {{ recs.debug.timing.ai_parse|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.ai_parse is not none else 'N/A' }}</li>
                     <li>Fuzzy match: {{ recs.debug.timing.fuzzy_match|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.fuzzy_match is not none else 'N/A' }}</li>
@@ -694,7 +707,7 @@
     </div>
     {% endif %}
     {% if not user_mode %}
-    <div class="debug-section" id="debug-section" style="width:50%;margin:20px auto;">
+    <div class="debug-section {% if not user_mode %}visible{% endif %}" id="debug-section" style="width:50%;margin:20px auto;">
         {% if recs %}
             {% if recs.debug.library_shows_full %}
                 <div><b>Library Shows (Full List):</b>
@@ -777,7 +790,7 @@
                     debugSection.classList.remove('visible');
                 }
             });
-            debugSection.classList.remove('visible');
+            // Leave initial state as rendered by server (visible when not in user mode)
         }
     });
     // Randomly select a loading gif
