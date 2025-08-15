@@ -85,6 +85,8 @@ Removed / Deprecated (docs updated):
 Known issues:
 - "Paddington effect" - It seems sometimes the model will get hung up on one movie and recommend it to several people. This isn't super noticeable and isn't even that common, but while building this I've noticed everyone getting recommended Paddington for some reason. Maybe it's the movie that will bring humanity together - all things to all people. Idk. 
 
+- .env is used for every call, but if you change the model in Settings and don't refresh the main page, it will persist with the old model name (display only) on the top right. 
+
 Planned / Ideas:
 - Short-lived availability cache (per tmdb_id) to reduce Overseerr round trips
 - Disk persistence for TMDb detail cache
