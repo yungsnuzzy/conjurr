@@ -1,8 +1,8 @@
 # zoltarr
-Zoltarr is an AI recommendation tool that5. Switch to Custom mode to constrain by Decade (1950s–2020 Now), Genre (alphabetized list), and/or Mood (7 curated options). You must select at least one; combinations will yield descriptive labels (e.g. "Best of 1980s Sci-Fi" or "Comfort Food recommendations"). Categories ticker hidden in Custom mode.uses Tautulli watch data to recommend what users should watch next.
+Zoltarr is an AI recommendation tool that uses Tautulli watch data to recommend what users should watch next.
 
 ## Overview
-Zoltarr analyzes Plex watch history via Tautulli, resolves authoritative TMDb IDs, and uses Google Gemini to suggest what to watch next. Availability is determined through Overseerr (via TMDb IDs + Plex URL presence). The app provides:
+Zoltarr analyzes Plex watch history via Tautulli, resolves TMDb IDs, and uses Google Gemini to suggest what to watch next. Availability is determined through Overseerr (via TMDb IDs + Plex URL presence). The app provides:
 
 - AI 20×20 candidate lists (20 shows + 20 movies requested from the model) with diversity caps
 - Clear split of recommendations available vs. not available (Overseerr / Plex presence)
@@ -10,7 +10,7 @@ Zoltarr analyzes Plex watch history via Tautulli, resolves authoritative TMDb ID
 - High-quality posters & metadata (overview/runtime/rating) via TMDb
 - Scrolling “AI Categories” ticker inferred from tastes (hidden in Custom mode)
 - Mobile-optimized UI (auto-selected in user mode for small viewports)
-- User Mode (email/username login; hides settings/debug panels)
+- User Mode (email/username required; hides settings/debug panels)
 - Custom Mode (Decade + Genre + Mood filters; must supply at least one; 40% history taste / 60% filter emphasis)
 - Concurrency + caching for TMDb searches, posters, Overseerr availability, and user lists
 - Timing & AI diagnostics (admin mode only)
