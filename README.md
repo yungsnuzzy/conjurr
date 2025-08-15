@@ -62,13 +62,15 @@ Mobile override:
 
 ### Poster Ordering / Separation
 - Movies appear before Shows; each type gets its own poster section.
+- Items that are available in plex appear separate from items that are unavailable. 
 
 ### Year Display & Matching
 - Each AI recommendation includes a year; the app enforces year presence in the Gemini prompt.
 - TMDb searches are weighted to favor exact year + title similarity; fallback search occurs if the year-specific search yields no result.
 - Poster cards display the year beneath the title.
 
-API usage: see `api_guide.md` for programmatic access to `/recommendations` (library rebuild endpoint removed).
+### API usage: 
+- see `api_guide.md` for programmatic access to `/recommendations` 
 
 ## Features in detail
 
@@ -79,6 +81,9 @@ Removed / Deprecated (docs updated):
 - Library inclusion filter UI (TAUTULLI_INCLUDE_LIBRARIES)
 - Plex direct library inventory (Plex URL/Token fields)
 - /rebuild_library endpoint
+
+Known issues:
+- "Paddington effect" - It seems sometimes the model will get hung up on one movie and recommend it to several people. This isn't super noticeable and isn't even that common, but while building this I've noticed everyone getting recommended Paddington for some reason. Maybe it's the movie that will bring humanity together - all things to all people. Idk. 
 
 Planned / Ideas:
 - Short-lived availability cache (per tmdb_id) to reduce Overseerr round trips
