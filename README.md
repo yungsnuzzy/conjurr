@@ -1,8 +1,12 @@
-# zoltarr
-Zoltarr is an AI recommendation tool that uses Tautulli watch data to recommend what users should watch next.
+# conjurr
+Conjurr is an AI recommendation tool that uses Tautulli watch data to recommend what users should watch next.
 
 ## Overview
-Zoltarr analyzes Plex watch history via Tautulli, resolves TMDb IDs, and uses Google Gemini to suggest what to watch next. Availability is determined through Overseerr (via TMDb IDs + Plex URL presence). The app provides:
+Conjurr analyzes Plex watch history via Tautulli, resolves authoritative TMDb IDs, and uses Google Gemini to suggest what to watch next. Availability is determined through Overseerr (via TMDb IDs + Plex URL presence). The app provides:tarr
+Conjurr is an AI recommendation tool that uses Tautulli watch data to recommend what users should watch next.
+
+## Overview
+Conjurr analyzes Plex watch history via Tautulli, resolves TMDb IDs, and uses Google Gemini to suggest what to watch next. Availability is determined through Overseerr (via TMDb IDs + Plex URL presence). The app provides:
 
 - AI 20×20 candidate lists (20 shows + 20 movies requested from the model) with diversity caps
 - Clear split of recommendations available vs. not available (Overseerr / Plex presence)
@@ -20,7 +24,7 @@ Zoltarr analyzes Plex watch history via Tautulli, resolves TMDb IDs, and uses Go
 ## Setup
 1. Install dependencies:
 	- Use `requirements.txt` with your Python 3.11+ environment.
-2. Start the app and open the UI at `/` (defaults to http://127.0.0.1:9658).
+2. Start the app and open the UI at `/` (defaults to http://127.0.0.1:2665).(CONJ)
 3. Visit `/settings` and enter:
 	- Tautulli URL and API key
 	- Google Gemini API key

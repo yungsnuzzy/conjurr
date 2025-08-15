@@ -3,9 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Zoltarr Mobile</title>
+    <title>Conjurr Mobile</title>
     <!-- Open Graph / Twitter Cards for rich previews -->
-    <meta property="og:title" content="Zoltarr Recommendations" />
+    <meta property="og:title" content="Conjurr Recommendations" />
     <meta property="og:type" content="we        function handleMoodSelectionMobile(){
             var moodSel = document.getElementById('mood');
             if(!moodSel) return;
@@ -27,13 +27,13 @@
                 });
             }
         }<meta property="og:url" content="{{ request.url }}" />
-    <meta property="og:image" content="{{ url_for('static', filename='ZoltarrBig.png', _external=True) }}" />
+    <meta property="og:image" content="{{ url_for('static', filename='Conjurr.png', _external=True) }}" />
     <meta property="og:description" content="Personalized, history-based Plex recommendations with posters and categories." />
-    <meta property="og:site_name" content="Zoltarr" />
+    <meta property="og:site_name" content="Conjurr" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Zoltarr Recommendations" />
+    <meta name="twitter:title" content="Conjurr Recommendations" />
     <meta name="twitter:description" content="Personalized, history-based Plex recommendations with posters and categories." />
-    <meta name="twitter:image" content="{{ url_for('static', filename='ZoltarrBig.png', _external=True) }}" />
+    <meta name="twitter:image" content="{{ url_for('static', filename='Conjurr.png', _external=True) }}" />
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <style>
         :root {
@@ -99,7 +99,7 @@
     <div id="loading-overlay">
         <div class="loading-inner" style="background:#000;border:1px solid #222;padding:22px 26px;border-radius:18px;box-shadow:0 4px 26px rgba(0,0,0,0.7),0 0 12px rgba(0,0,0,0.55) inset;display:flex;flex-direction:column;align-items:center;">
             <img id="loading-gif" src="/static/load.gif" alt="Loading..." onerror="this.onerror=null;this.src='/static/load.gif';" />
-            <span id="loading-text" style="margin-top:12px;">Loading Zoltarr's wisdom...</span>
+            <span id="loading-text" style="margin-top:12px;">Loading Conjurr's wisdom...</span>
         </div>
     </div>
 
@@ -107,7 +107,7 @@
         <div class="topbar">
             <img src="/static/load.gif" alt="Genie" />
             <div>
-                <div class="title">Zoltarr knows all</div>
+                <div class="title">Conjurr knows all</div>
                 {% if version %}<div class="version">{{ version }}</div>{% endif %}
                 {% if recs and recs.debug and recs.debug.gemini_model_used %}
                     <div class="version" style="font-size:0.85em; color:#cfc088;">Model: {{ recs.debug.gemini_model_used }}</div>
@@ -341,16 +341,16 @@
             // Safety fallback if none load within 1500ms
             setTimeout(function(){ if(!picked){ img.src = '/static/load.gif'; } }, 1500);
             var phrases = [
-                "Consulting Zoltarr's crystal ball...",
+                "Consulting Conjurr's crystal ball...",
                 "Checking out blockbuster shelves...",
-                "Summoning Zoltarr's ancient wisdom...",
+                "Summoning Conjurr's ancient wisdom...",
                 "Peeking behind the velvet curtain...",
                 "Looking for hidden gems...",
                 "Polishing the magic lamp lol...",
                 "Reading fortunes in your watch history...",
                 "Asking the oracle (please hold)...",
                 "Shuffling fate's deck...",
-                "Zoltarr and chill?",
+                "Conjurr and chill?",
                 "Whoops, not that movie...",
                 "Uhhh... I mean, how about this one?",
                 "Don't yell at the developer",

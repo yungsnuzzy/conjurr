@@ -57,18 +57,18 @@
     </style>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <meta charset="UTF-8">
-    <title>Zoltarr</title>
+    <title>Conjurr</title>
     <!-- Open Graph / Twitter Cards for rich previews -->
-    <meta property="og:title" content="Zoltarr Recommendations" />
+    <meta property="og:title" content="Conjurr Recommendations" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="{{ request.url }}" />
-    <meta property="og:image" content="{{ url_for('static', filename='ZoltarrBig.png', _external=True) }}" />
+    <meta property="og:image" content="{{ url_for('static', filename='Conjurr.png', _external=True) }}" />
     <meta property="og:description" content="Personalized, history-based Plex recommendations with posters and categories." />
-    <meta property="og:site_name" content="Zoltarr" />
+    <meta property="og:site_name" content="Conjurr" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Zoltarr Recommendations" />
+    <meta name="twitter:title" content="Conjurr Recommendations" />
     <meta name="twitter:description" content="Personalized, history-based Plex recommendations with posters and categories." />
-    <meta name="twitter:image" content="{{ url_for('static', filename='ZoltarrBig.png', _external=True) }}" />
+    <meta name="twitter:image" content="{{ url_for('static', filename='Conjurr.png', _external=True) }}" />
     <style>
         body {
             background: #111;
@@ -85,7 +85,7 @@
     td li { margin: 0 0 3px 0; }
     td, th { word-break: break-word; }
     td { vertical-align: top; }
-        .zoltarr-banner {
+        .conjurr-banner {
             position: absolute;
             top: 20px;
             right: 30px;
@@ -93,19 +93,19 @@
             align-items: center;
             z-index: 10;
         }
-        .zoltarr-banner img {
+        .conjurr-banner img {
             width: 48px;
             height: 48px;
             margin-right: 10px;
         }
-        .zoltarr-banner span {
+        .conjurr-banner span {
             font-size: 1.3em;
             font-weight: bold;
             color: #ffe066;
             text-shadow: 1px 1px 8px #000, 0 0 8px #ffe066;
             letter-spacing: 1px;
         }
-        .zoltarr-banner .version {
+        .conjurr-banner .version {
             display: block;
             font-size: 0.95em;
             font-weight: normal;
@@ -194,14 +194,14 @@
     <div id="loading-overlay" data-library-building="false" style="display: none;">
         <div class="loading-inner" style="background:#000;border:1px solid #222;padding:26px 30px;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,0.7),0 0 12px rgba(0,0,0,0.6) inset;">
             <img id="loading-gif" src="/static/load.gif" alt="Loading...">
-            <span id="loading-text" style="margin-top:14px;">Loading Zoltarr's wisdom...</span>
+            <span id="loading-text" style="margin-top:14px;">Loading Conjurr's wisdom...</span>
         </div>
     </div>
     {% endif %}
-    <div class="zoltarr-banner">
+    <div class="conjurr-banner">
         <img src="/static/load.gif" alt="Genie">
         <div>
-            <span>Zoltarr knows all</span>
+            <span>Conjurr knows all</span>
             {% if version %}<span class="version">{{ version }}</span>{% endif %}
             {% if recs and recs.debug and recs.debug.gemini_model_used %}
                 <span class="version" style="font-size:0.9em;color:#cfc088;">Model: {{ recs.debug.gemini_model_used }}</span>
@@ -844,16 +844,16 @@
     function pickLoadingPhrase(initial) {
         if (libraryBuilding) return; // keep library message during build
         var phrases = [
-            "Consulting Zoltarr's crystal ball...",
+            "Consulting Conjurr's crystal ball...",
             "Checking out blockbuster shelves...",
-            "Summoning Zoltarr's ancient wisdom...",
+            "Summoning Conjurr's ancient wisdom...",
             "Peeking behind the velvet curtain...",
             "Looking for hidden gems...",
             "Polishing the magic lamp lol...",
             "Reading fortunes in your watch history...",
             "Asking the oracle (please hold)...",
             "Shuffling fate's deck...",
-            "Zoltarr and chill?",
+            "Conjurr and chill?",
             "Whoops, not that movie...",
             "Uhhh... I mean, how about this one?",
             "Don't yell at the developer",

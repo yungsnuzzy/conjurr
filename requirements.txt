@@ -1,5 +1,5 @@
 ############################################################
-# Runtime Dependencies for ZOLTARR
+# Runtime Dependencies for CONJURR
 # Pins use compatible release (PEP 440 ~) where practical.
 # Adjust versions if your environment requires newer patches.
 ############################################################

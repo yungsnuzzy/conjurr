@@ -1,4 +1,4 @@
-# ZOLTARR API Guide
+# CONJURR API Guide
 
 Programmatic access to AI-driven recommendations. Architecture relies on:
 - Tautulli: watch history & user list  
@@ -40,46 +40,46 @@ Rate limits: None
 ### Basic Usage
 ```powershell
 # Using Tautulli user ID (backward compatible)
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user_id=29170859"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user_id=29170859"
 
 # Using email lookup (new feature)
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com"
 
 # Using username lookup
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=jsmith"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=jsmith"
 ```
 
 ### Custom Filtering
 ```powershell
 # Animation recommendations
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&mode=custom&genre=animation"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&mode=custom&genre=animation"
 
 # 1980s movies and shows
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user_id=29170859&mode=custom&decade=1980s"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user_id=29170859&mode=custom&decade=1980s"
 
 # 2000s Sci-Fi
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&mode=custom&decade=2000s&genre=sci-fi"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&mode=custom&decade=2000s&genre=sci-fi"
 
 # Comfort Food mood recommendations
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&mode=custom&mood=comfort%20food"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&mode=custom&mood=comfort%20food"
 
 # Award Winners mood
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user_id=29170859&mode=custom&mood=award%20winners"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user_id=29170859&mode=custom&mood=award%20winners"
 
 # Seasonal mood (holiday-themed recommendations)
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&mode=custom&mood=seasonal"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&mode=custom&mood=seasonal"
 
 # Combined filtering: 1990s Award Winners
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&mode=custom&decade=1990s&mood=award%20winners"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&mode=custom&decade=1990s&mood=award%20winners"
 ```
 
 ### Output Formats  
 ```powershell
 # Force JSON output (default)
-Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&format=json"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&format=json"
 
 # Get HTML for embedding in web pages
-Invoke-WebRequest -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&format=html"
+Invoke-WebRequest -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&format=html"
 ```
 ```
 
@@ -156,7 +156,7 @@ Multiple ways to identify users for the API:
   ```powershell
   Invoke-RestMethod -Uri "http://tautulli:8181/api/v2?apikey=YOUR_KEY&cmd=get_users"
   ```
-- **Debug Output**: User IDs appear in Zoltarr logs during recommendations
+- **Debug Output**: User IDs appear in Conjurr logs during recommendations
 
 ### 2. Email/Username Lookup (New Feature)
 - Use any email address associated with the Plex account
