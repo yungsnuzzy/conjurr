@@ -209,7 +209,7 @@
         </div>
     </div>
     <h2 style="text-align:center">History Based Content Recommendations</h2>
-    {% if user_config_status and user_config_status|length > 0 %}
+    {% if not user_mode and user_config_status and user_config_status|length > 0 %}
     <div style="position:absolute;top:130px;left:18px;z-index:10;background:#222;padding:14px 18px;border-radius:10px;box-shadow:0 0 10px #0008;min-width:260px;">
         <div style="font-weight:bold;margin-bottom:6px;color:#ffe066;">Configuration Status</div>
         <ul style="list-style:none;margin:0;padding:0;font-size:0.85em;line-height:1.5;max-width:260px;">
