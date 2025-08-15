@@ -411,7 +411,11 @@
                     if(modeVal==='custom'){
                         var decadeSel=document.getElementById('decade');
                         var genreSel=document.getElementById('genre');
-                        if((!decadeSel || !decadeSel.value) && (!genreSel || !genreSel.value)){
+                        var moodSel=document.getElementById('mood');
+                        var noDecade = !decadeSel || !decadeSel.value;
+                        var noGenre = !genreSel || !genreSel.value;
+                        var noMood = !moodSel || !moodSel.value;
+                        if(noDecade && noGenre && noMood){
                             e.preventDefault();
                             var err=document.getElementById('custom-error-mobile');
                             if(err) err.textContent='Select a decade, genre, or mood (or any combination) for Custom mode.';
