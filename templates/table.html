@@ -208,7 +208,7 @@
             {% endif %}
         </div>
     </div>
-    <h2 style="text-align:center">History Based User Recommendations</h2>
+    <h2 style="text-align:center">History Based Content Recommendations</h2>
     {% if user_config_status and user_config_status|length > 0 %}
     <div style="position:absolute;top:130px;left:18px;z-index:10;background:#222;padding:14px 18px;border-radius:10px;box-shadow:0 0 10px #0008;min-width:260px;">
         <div style="font-weight:bold;margin-bottom:6px;color:#ffe066;">Configuration Status</div>
@@ -269,10 +269,16 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div id="mood-wrap" {% if mode!='custom' %}style="display:none;"{% endif %}>
+                        <label style="font-size:0.9em;display:block;margin-bottom:4px;" for="mood">Mood</label>
+                        <select name="mood" id="mood" style="padding:6px 8px;min-width:140px;">
+                            <option value="">-- Any --</option>
+                            {% for k,v in moods|dictsort(by='value') %}
+                                <option value="{{ k }}" {% if mood_selected==k %}selected{% endif %}>{{ v }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
-                {% if selection_desc %}
-                    <div style="color:#ddd08a;font-size:0.9em;margin-top:2px;">{{ selection_desc }}</div>
-                {% endif %}
                 <div id="custom-error-user" style="color:#ff8888;font-size:0.85em;margin-top:4px;">{% if debug_info and debug_info.error and (mode=='custom') and not recs %}{{ debug_info.error }}{% endif %}</div>
                 <div class="cta-row" style="margin-top:2px;">
                     <button class="primary-cta" type="submit">Get Recommendations</button>
@@ -326,10 +332,16 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div id="mood-wrap" {% if mode!='custom' %}style="display:none;"{% endif %}>
+                        <label style="font-size:0.95em;display:block;margin-bottom:4px;" for="mood">Mood</label>
+                        <select name="mood" id="mood" style="padding:6px 8px;min-width:140px;">
+                            <option value="">-- Any --</option>
+                            {% for k,v in moods|dictsort(by='value') %}
+                                <option value="{{ k }}" {% if mood_selected==k %}selected{% endif %}>{{ v }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
                 </div>
-                {% if selection_desc %}
-                    <div style="color:#ddd08a;font-size:0.95em;margin-top:4px;">{{ selection_desc }}</div>
-                {% endif %}
                 <div id="custom-error-admin" style="color:#ff8888;font-size:0.85em;margin-top:4px;">{% if debug_info and debug_info.error and (mode=='custom') and not recs %}{{ debug_info.error }}{% endif %}</div>
                 <div class="cta-row" style="margin-top:6px;">
                     <button class="primary-cta" type="submit" {% if not users or users|length == 0 %}disabled{% endif %}>Get Recommendations</button>
@@ -341,6 +353,13 @@
             {% endif %}
         {% endif %}
     </form>
+    {% if selection_desc %}
+    <div style="text-align:center;margin:20px auto 10px auto;padding:0 20px;">
+        <div style="color:#ffe066;font-size:1.4em;font-weight:bold;text-shadow:1px 1px 4px #000;">
+            <span style="color:#ddd08a;">{{ selection_desc }}</span>
+        </div>
+    </div>
+    {% endif %}
     {% if recs %}
     <div style="width:100%;margin:10px auto 20px auto;display:flex;flex-direction:column;align-items:center;">
         <style>
@@ -372,7 +391,7 @@
             <div style="text-align:center;color:#ec1e1e;margin:10px 0 6px 0;">** Add TMDb API key in Settings for content posters **</div>
         {% endif %}
         {% if recs and recs.show_posters and recs.show_posters[0].href %}
-            <div class="muted-note">Click a poster to open the title in Overseerr.</div>
+            <div class="muted-note">Click a poster to open the title in Overseerr. Recommendations are (probably) unwatched for your account.</div>
         {% endif %}
         {% if user_mode and selected_user %}
             {% set user_name = (selected_user.friendly_name or selected_user.username) if selected_user else None %}
@@ -884,14 +903,16 @@
                 if(modeVal==='custom'){
                     var decadeSel=document.getElementById('decade');
                     var genreSel=document.getElementById('genre');
+                    var moodSel=document.getElementById('mood');
                     var noDecade = !decadeSel || !decadeSel.value;
                     var noGenre = !genreSel || !genreSel.value;
-                    if(noDecade && noGenre){
+                    var noMood = !moodSel || !moodSel.value;
+                    if(noDecade && noGenre && noMood){
                         e.preventDefault();
                         var errElUser = document.getElementById('custom-error-user');
                         var errElAdmin = document.getElementById('custom-error-admin');
-                        if(errElUser) errElUser.textContent = 'Select a decade or a genre (or both) for Custom mode.';
-                        if(errElAdmin) errElAdmin.textContent = 'Select a decade or a genre (or both) for Custom mode.';
+                        if(errElUser) errElUser.textContent = 'Select a decade, genre, or mood (or any combination) for Custom mode.';
+                        if(errElAdmin) errElAdmin.textContent = 'Select a decade, genre, or mood (or any combination) for Custom mode.';
                         return false;
                     }
                 }
@@ -919,12 +940,36 @@
 function toggleCustomFields(){
     var customRadio=document.querySelector('input[name="mode"][value="custom"]');
     var show = customRadio && customRadio.checked;
-    ['decade-wrap','genre-wrap'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.display = show? 'block':'none'; }});
+    ['decade-wrap','genre-wrap','mood-wrap'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.display = show? 'block':'none'; }});
+}
+function handleMoodSelection(){
+    var moodSel = document.getElementById('mood');
+    if(!moodSel) return;
+    var hasMood = moodSel.value && moodSel.value !== '';
+    if(hasMood) {
+        // Hide decade and genre when mood is selected, per Option A requirement
+        ['decade-wrap','genre-wrap'].forEach(function(id){ 
+            var el=document.getElementById(id); 
+            if(el){ el.style.display = 'none'; }
+        });
+        // Set decade and genre to "Any" (empty value) when mood is selected
+        var decadeSel=document.getElementById('decade'); if(decadeSel) decadeSel.value='';
+        var genreSel=document.getElementById('genre'); if(genreSel) genreSel.value='';
+    } else {
+        // Show decade and genre when no mood is selected
+        ['decade-wrap','genre-wrap'].forEach(function(id){ 
+            var el=document.getElementById(id); 
+            if(el){ el.style.display = 'block'; }
+        });
+    }
 }
 document.addEventListener('DOMContentLoaded',function(){
     toggleCustomFields();
+    handleMoodSelection();
     var radios=document.querySelectorAll('input[name="mode"]');
     radios.forEach(function(r){ r.addEventListener('change', toggleCustomFields); });
+    var moodSel=document.getElementById('mood');
+    if(moodSel){ moodSel.addEventListener('change', handleMoodSelection); }
 });
 </script>
 <script>
@@ -946,6 +991,8 @@ function zPopulateFromCookies(){
     if(d){ var decadeSel=document.getElementById('decade'); if(decadeSel){ decadeSel.value=d; }}
     var g = zGetCookie('z_genre');
     if(g){ var genreSel=document.getElementById('genre'); if(genreSel){ genreSel.value=g; }}
+    var mood = zGetCookie('z_mood');
+    if(mood){ var moodSel=document.getElementById('mood'); if(moodSel){ moodSel.value=mood; }}
     toggleCustomFields();
 }
 
@@ -957,6 +1004,7 @@ function zStoreOnSubmit(){
         var modeVal = (document.querySelector('input[name="mode"]:checked')||{}).value || 'history'; zSetCookie('z_mode', modeVal, 30);
         var decadeSel=document.getElementById('decade'); if(decadeSel) zSetCookie('z_decade', decadeSel.value||'', 30);
         var genreSel=document.getElementById('genre'); if(genreSel) zSetCookie('z_genre', genreSel.value||'', 30);
+        var moodSel=document.getElementById('mood'); if(moodSel) zSetCookie('z_mood', moodSel.value||'', 30);
     });
 }
 

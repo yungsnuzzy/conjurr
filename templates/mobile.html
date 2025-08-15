@@ -6,8 +6,27 @@
     <title>Zoltarr Mobile</title>
     <!-- Open Graph / Twitter Cards for rich previews -->
     <meta property="og:title" content="Zoltarr Recommendations" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="{{ request.url }}" />
+    <meta property="og:type" content="we        function handleMoodSelectionMobile(){
+            var moodSel = document.getElementById('mood');
+            if(!moodSel) return;
+            var hasMood = moodSel.value && moodSel.value !== '';
+            if(hasMood) {
+                // Hide decade and genre when mood is selected, per Option A requirement
+                ['decade-wrap','genre-wrap'].forEach(function(id){ 
+                    var el=document.getElementById(id); 
+                    if(el){ el.style.display = 'none'; }
+                });
+                // Set decade and genre to "Any" (empty value) when mood is selected
+                var decadeSel=document.getElementById('decade'); if(decadeSel) decadeSel.value='';
+                var genreSel=document.getElementById('genre'); if(genreSel) genreSel.value='';
+            } else {
+                // Show decade and genre when no mood is selected
+                ['decade-wrap','genre-wrap'].forEach(function(id){ 
+                    var el=document.getElementById(id); 
+                    if(el){ el.style.display = 'block'; }
+                });
+            }
+        }<meta property="og:url" content="{{ request.url }}" />
     <meta property="og:image" content="{{ url_for('static', filename='ZoltarrBig.png', _external=True) }}" />
     <meta property="og:description" content="Personalized, history-based Plex recommendations with posters and categories." />
     <meta property="og:site_name" content="Zoltarr" />
@@ -97,7 +116,7 @@
         </div>
         <div class="banner-space"></div>
 
-        <h2 style="text-align:center; font-size:1.1rem; margin: 4px 0 6px;">History Based User Recommendations</h2>
+        <h2 style="text-align:center; font-size:1.1rem; margin: 4px 0 6px;">History Based Content Recommendations</h2>
 
         <form method="post">
             <label for="user_login">Enter Plex email or username:</label>
@@ -146,6 +165,15 @@
                         {% endfor %}
                     </select>
                 </div>
+                <div id="mood-wrap" data-block="mood" style="min-width:140px;display:none;">
+                    <label style="font-size:0.8rem;display:block;margin-bottom:2px;" for="mood">Mood</label>
+                    <select name="mood" id="mood" style="width:100%;background:#222;color:var(--accent);border:1px solid var(--border);padding:6px 8px;border-radius:6px;">
+                        <option value="">-- Any --</option>
+                        {% for k,v in moods|dictsort(by='value') %}
+                            <option value="{{ k }}" {% if mood_selected==k %}selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
             {% if selection_desc %}
                 <div class="note" style="margin-top:4px;">{{ selection_desc }}</div>
@@ -160,7 +188,7 @@
                 {% if user_name %}<div class="username">Recommendations for {{ user_name }}</div>{% endif %}
             {% endif %}
             {% if recs.show_posters and recs.show_posters[0].href %}
-                        <div class="note">Tap a poster to open the title in Overseerr.</div>
+                        <div class="note">Tap a poster to open the title in Overseerr. Recommendations are (probably) unwatched for your account.</div>
             {% endif %}
             {# Movies first - limit to 10 total #}
             {% set movie_available = recs.movie_posters[:12] if recs.movie_posters else [] %}
@@ -334,7 +362,22 @@
         function toggleCustomMobile(){
             var history = document.getElementById('m-history');
             var show = !(history && history.checked);
-            ['decade-wrap','genre-wrap'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.display = show? 'block':'none'; }});
+            ['decade-wrap','genre-wrap','mood-wrap'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.display = show? 'block':'none'; }});
+        }
+        function handleMoodSelectionMobile(){
+            var moodSel = document.getElementById('mood');
+            if(!moodSel) return;
+            var hasMood = moodSel.value && moodSel.value !== '';
+            // Hide decade and genre when mood is selected, per Option A requirement
+            ['decade-wrap','genre-wrap'].forEach(function(id){ 
+                var el=document.getElementById(id); 
+                if(el){ el.style.display = hasMood ? 'none':'block'; }
+            });
+            // Clear values when hidden
+            if(hasMood){
+                var decadeSel=document.getElementById('decade'); if(decadeSel) decadeSel.value='';
+                var genreSel=document.getElementById('genre'); if(genreSel) genreSel.value='';
+            }
         }
         // Cookie helpers
         function zSetCookie(name,value,days){ try { var d=new Date(); d.setTime(d.getTime()+ (days*24*60*60*1000)); document.cookie=name+"="+encodeURIComponent(value)+";expires="+d.toUTCString()+";path=/"; } catch(e){} }
@@ -346,7 +389,9 @@
             var m = zGetCookie('z_mode'); if(m){ var r=document.querySelector('input[name="mode"][value="'+m+'"]'); if(r){ r.checked=true; }}
             var d = zGetCookie('z_decade'); if(d){ var ds=document.getElementById('decade'); if(ds) ds.value=d; }
             var g = zGetCookie('z_genre'); if(g){ var gs=document.getElementById('genre'); if(gs) gs.value=g; }
+            var mood = zGetCookie('z_mood'); if(mood){ var ms=document.getElementById('mood'); if(ms) ms.value=mood; }
             toggleCustomMobile();
+            handleMoodSelectionMobile();
         }
         function zStoreOnSubmit(){
             var form=document.querySelector('form[method="post"]'); if(!form) return;
@@ -355,6 +400,7 @@
                 var modeVal=(document.querySelector('input[name="mode"]:checked')||{}).value || 'history'; zSetCookie('z_mode', modeVal, 30);
                 var d=document.getElementById('decade'); if(d) zSetCookie('z_decade', d.value||'', 30);
                 var g=document.getElementById('genre'); if(g) zSetCookie('z_genre', g.value||'', 30);
+                var mood=document.getElementById('mood'); if(mood) zSetCookie('z_mood', mood.value||'', 30);
             });
         }
         document.addEventListener('DOMContentLoaded', function() {
@@ -368,7 +414,7 @@
                         if((!decadeSel || !decadeSel.value) && (!genreSel || !genreSel.value)){
                             e.preventDefault();
                             var err=document.getElementById('custom-error-mobile');
-                            if(err) err.textContent='Select a decade or a genre (or both) for Custom mode.';
+                            if(err) err.textContent='Select a decade, genre, or mood (or any combination) for Custom mode.';
                             return false;
                         }
                     }
@@ -392,6 +438,8 @@
             zStoreOnSubmit();
             toggleCustomMobile();
             ['m-history','m-custom'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.addEventListener('change', toggleCustomMobile); }});
+            var moodSel=document.getElementById('mood');
+            if(moodSel){ moodSel.addEventListener('change', handleMoodSelectionMobile); }
             if("{{ '1' if recs else '0' }}"==='1'){ try { window.history.replaceState({}, document.title, window.location.pathname); } catch(e){} }
         });
     </script>
