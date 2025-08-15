@@ -28,11 +28,12 @@ Rate limits: None
 - `mode` (optional): `history` (default) or `custom`
 - `decade` (optional, custom mode): `1950s`, `1960s`, `1970s`, `1980s`, `1990s`, `2000s`, `2010s`, `2020s` (or numeric: `1950`, `1960`, etc.)
 - `genre` (optional, custom mode): TMDb genre name (case-insensitive): `action`, `drama`, `comedy`, `sci-fi`, `horror`, `thriller`, `documentary`, `animation`, `family`, `fantasy`, `romance`, `crime`, `mystery`, `adventure`, `war`, `western`, `musical`, `biography`, `history`, `sports`
+- `mood` (optional, custom mode): Mood-based filtering: `underrated`, `surprise me`, `out of my comfort zone`, `comfort food`, `award winners`, `popular (streaming services)`, `seasonal`
 - `format` (optional): `json` (default) or `html`
 
 **Requirements:**
 - Either `user_id` OR `user` must be provided
-- Custom mode requires at least one of: `decade`, `genre`
+- Custom mode requires at least one of: `decade`, `genre`, `mood`
 
 ## Examples (PowerShell)
 
@@ -58,6 +59,18 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user_i
 
 # 2000s Sci-Fi
 Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&mode=custom&decade=2000s&genre=sci-fi"
+
+# Comfort Food mood recommendations
+Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&mode=custom&mood=comfort%20food"
+
+# Award Winners mood
+Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user_id=29170859&mode=custom&mood=award%20winners"
+
+# Seasonal mood (holiday-themed recommendations)
+Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&mode=custom&mood=seasonal"
+
+# Combined filtering: 1990s Award Winners
+Invoke-RestMethod -Method Get -Uri "http://localhost:9658/recommendations?user=josh@example.com&mode=custom&decade=1990s&mood=award%20winners"
 ```
 
 ### Output Formats  
@@ -129,7 +142,8 @@ Invoke-WebRequest -Method Get -Uri "http://localhost:9658/recommendations?user=j
 - 400: Invalid mode (must be `history` or `custom`)
 - 400: Invalid decade (must be `1950s`-`2020s`)
 - 400: Invalid genre (see supported genres list above)
-- 400: Custom mode missing filters (requires `decade` and/or `genre`)
+- 400: Invalid mood (must be one of: `underrated`, `surprise me`, `out of my comfort zone`, `comfort food`, `award winners`, `popular (streaming services)`, `seasonal`)
+- 400: Custom mode missing filters (requires `decade`, `genre`, and/or `mood`)
 - 400: Invalid format (must be `json` or `html`)
 - 500: Internal error (check debug_info for details)
 
@@ -172,6 +186,7 @@ Mobile-optimized HTML suitable for embedding or direct display:
 - History-based and custom mode recommendations  
 - Decade filtering (1950s-2020s)
 - Genre filtering (21 supported genres)
+- Mood filtering (7 curated options: Underrated, Surprise Me, Out of my comfort zone, Comfort Food, Award Winners, Popular streaming, Seasonal)
 - JSON and HTML response formats
 - Overseerr availability checking
 - TMDb metadata and posters
@@ -200,7 +215,7 @@ For existing API consumers:
 1. **No changes required** - existing calls continue to work
 2. **Optional enhancements** - gradually adopt new parameters as needed
 3. **Email lookup** - replace user_id with user parameter for simpler client code
-4. **Custom filtering** - add mode/decade/genre for specialized recommendations
+4. **Custom filtering** - add mode/decade/genre/mood for specialized recommendations
 
 ## Best Practices
 - Cache responses client-side if polling (recommendations are compute-intensive)

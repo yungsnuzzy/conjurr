@@ -1,5 +1,5 @@
 # zoltarr
-Zoltarr is an AI recommendation tool that uses Tautulli watch data to recommend what users should watch next.
+Zoltarr is an AI recommendation tool that5. Switch to Custom mode to constrain by Decade (1950s–2020 Now), Genre (alphabetized list), and/or Mood (7 curated options). You must select at least one; combinations will yield descriptive labels (e.g. "Best of 1980s Sci-Fi" or "Comfort Food recommendations"). Categories ticker hidden in Custom mode.uses Tautulli watch data to recommend what users should watch next.
 
 ## Overview
 Zoltarr analyzes Plex watch history via Tautulli, resolves authoritative TMDb IDs, and uses Google Gemini to suggest what to watch next. Availability is determined through Overseerr (via TMDb IDs + Plex URL presence). The app provides:
@@ -11,7 +11,7 @@ Zoltarr analyzes Plex watch history via Tautulli, resolves authoritative TMDb ID
 - Scrolling “AI Categories” ticker inferred from tastes (hidden in Custom mode)
 - Mobile-optimized UI (auto-selected in user mode for small viewports)
 - User Mode (email/username login; hides settings/debug panels)
-- Custom Mode (Decade + Genre filters; must supply at least one; 40% history taste / 60% filter emphasis)
+- Custom Mode (Decade + Genre + Mood filters; must supply at least one; 40% history taste / 60% filter emphasis)
 - Concurrency + caching for TMDb searches, posters, Overseerr availability, and user lists
 - Timing & AI diagnostics (admin mode only)
 - Open Graph/Twitter meta tags for rich link previews
@@ -53,9 +53,10 @@ Mobile override:
 5. Switch to Custom mode to constrain by Decade (1950s–2020 Now) and/or Genre (alphabetized list). You must select at least one; both will yield a combined descriptor (e.g. “Best of 1980s Sci-Fi”). Categories ticker hidden in Custom mode.
 
 ### Custom Mode Details
-- Weighting: 40% influenced by historical viewing taste, 60% by the selected decade/genre filters.
+- Weighting: 40% influenced by historical viewing taste, 60% by the selected decade/genre/mood filters.
 - Decade 2020 includes all future/current titles (2020 and later).
-- If only one dimension is provided, the other is broadened intelligently (e.g. only Decade → broader genre variety; only Genre → broader decades around modern/popular eras).
+- Mood options: Underrated, Surprise Me, Out of my comfort zone, Comfort Food, Award Winners, Popular (streaming services), Seasonal.
+- If only one dimension is provided, the other dimensions are broadened intelligently (e.g. only Decade → broader genre/mood variety; only Mood → broader decades around user preferences).
 - The selection descriptor (selection_desc) is shown under the form and returned in the API.
 - Categories ticker suppressed to keep focus on curated filter output.
 
