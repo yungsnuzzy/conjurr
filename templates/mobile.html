@@ -175,12 +175,17 @@
                     </select>
                 </div>
             </div>
-            {% if selection_desc %}
-                <div class="note" style="margin-top:4px;">{{ selection_desc }}</div>
-            {% endif %}
             <div id="custom-error-mobile" class="err" style="margin-top:4px;">{% if debug_info and debug_info.error and mode=='custom' and not recs %}{{ debug_info.error }}{% endif %}</div>
             <button class="primary-cta" type="submit">Get Recommendations</button>
         </form>
+
+        {% if selection_desc %}
+        <div style="text-align:center;margin:20px auto 10px auto;padding:0 20px;">
+            <div style="color:var(--accent);font-size:1.4em;font-weight:bold;text-shadow:1px 1px 4px #000;">
+                <span style="color:#ddd08a;">{{ selection_desc }}</span>
+            </div>
+        </div>
+        {% endif %}
 
         {% if recs %}
             {% if selected_user %}
