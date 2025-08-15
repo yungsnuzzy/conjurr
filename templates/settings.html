@@ -103,6 +103,11 @@
                 <div class="hint">Adds high-quality posters, overview text, runtime & vote averages.</div>
             </div>
             <div class="field">
+                <label for="OVERSEERR_URL">Overseerr URL <span class="inline-badge">Optional</span></label>
+                <input type="text" id="OVERSEERR_URL" name="OVERSEERR_URL" value="{{ settings.OVERSEERR_URL }}" placeholder="http://localhost:5055">
+                <div class="hint">Base URL to your Overseerr instance for availability checks and deep links.</div>
+            </div>
+            <div class="field">
                 <label for="OVERSEERR_API_KEY">Overseerr API Key <span class="inline-badge">Optional</span></label>
                 <input type="password" id="OVERSEERR_API_KEY" name="OVERSEERR_API_KEY" value="{{ settings.OVERSEERR_API_KEY }}" placeholder="Paste your Overseerr API key">
                 <div class="hint">Not required for deep links; enables potential future authenticated Overseerr features.</div>

@@ -2,20 +2,20 @@
 Zoltarr is an AI recommendation tool that uses Tautulli watch data to recommend what users should watch next.
 
 ## Overview
-Zoltarr analyzes Plex watch history via Tautulli and uses Google Gemini to suggest what to watch next. The app provides:
+Zoltarr analyzes Plex watch history via Tautulli, resolves authoritative TMDb IDs, and uses Google Gemini to suggest what to watch next. Availability is determined through Overseerr (via TMDb IDs + Plex URL presence). The app provides:
 
-- AI Top 10 recommendations for shows and movies (History mode)
-- Clear split of recommendations available in your Plex library vs. not in library
-- Your Top Watched and Recently Watched lists that inform the AI
-- Beautiful poster galleries for recommended shows and movies (via TMDb)
-- A scrolling “AI Categories” ticker inferred from your tastes (hidden in Custom mode)
-- Optional mobile-optimized UI (auto-detected for phones/tablets in user mode)
-- Optional “User Mode” for direct user access with email/username login (no admin/debug panels)
-- Custom Mode with optional Decade + Genre filters (must pick at least one) for a curated blend (40% history taste, 60% filter target)
-- Local library caching (SQLite) refreshed daily, plus a one-click Rebuild Cache button
-- Timing and AI diagnostics (visible in admin mode; hidden in user mode)
+- AI 20×20 candidate lists (20 shows + 20 movies requested from the model) with diversity caps
+- Clear split of recommendations available vs. not available (Overseerr / Plex presence)
+- Top Watched and Recently Watched lists that inform the AI prompt
+- High-quality posters & metadata (overview/runtime/rating) via TMDb
+- Scrolling “AI Categories” ticker inferred from tastes (hidden in Custom mode)
+- Mobile-optimized UI (auto-selected in user mode for small viewports)
+- User Mode (email/username login; hides settings/debug panels)
+- Custom Mode (Decade + Genre filters; must supply at least one; 40% history taste / 60% filter emphasis)
+- Concurrency + caching for TMDb searches, posters, Overseerr availability, and user lists
+- Timing & AI diagnostics (admin mode only)
 - Open Graph/Twitter meta tags for rich link previews
-- Model label in the header showing which Gemini model was used
+- Model label in header (shows which Gemini model served the response)
 
 ## Setup
 1. Install dependencies:
@@ -50,8 +50,7 @@ Mobile override:
 2. In user mode: enter your Plex email or username, then click “Get Recommendations”.
 3. Review posters (Movies listed before Shows; each on its own row). Categories ticker only appears in History mode.
 4. Expand the “table details” (in user mode) to see the full data table.
-5. Use “Rebuild Library DB” when library data is stale; the next request repopulates the cache.
-6. Switch to Custom mode to constrain by Decade (1950s–2020 Now) and/or Genre (alphabetized list). You must select at least one; both will yield a combined descriptor (e.g. “Best of 1980s Sci-Fi”). Categories ticker is hidden in Custom mode.
+5. Switch to Custom mode to constrain by Decade (1950s–2020 Now) and/or Genre (alphabetized list). You must select at least one; both will yield a combined descriptor (e.g. “Best of 1980s Sci-Fi”). Categories ticker hidden in Custom mode.
 
 ### Custom Mode Details
 - Weighting: 40% influenced by historical viewing taste, 60% by the selected decade/genre filters.
@@ -61,17 +60,26 @@ Mobile override:
 - Categories ticker suppressed to keep focus on curated filter output.
 
 ### Poster Ordering / Separation
-- Movies always appear before Shows in both poster galleries and tables.
-- Movies and Shows never share the same horizontal poster row (hard separation).
+- Movies appear before Shows; each type gets its own poster section.
 
 ### Year Display & Matching
 - Each AI recommendation includes a year; the app enforces year presence in the Gemini prompt.
 - TMDb searches are weighted to favor exact year + title similarity; fallback search occurs if the year-specific search yields no result.
 - Poster cards display the year beneath the title.
 
-API usage: see `api_guide.md` for programmatic access to `/recommendations` and `/rebuild_library` with examples and response fields.
+API usage: see `api_guide.md` for programmatic access to `/recommendations` (library rebuild endpoint removed).
 
 ## Features in detail
 
- Overseerr (optional) for request links; set OVERSEERR_URL and optionally OVERSEERR_API_KEY. When set, posters link to the item page in Overseerr.
-- Package as a standalone Windows service/EXE.
+ Overseerr (optional) for deep links & availability; set OVERSEERR_URL and optionally OVERSEERR_API_KEY (if your instance requires a key). Posters link to the Overseerr item page.
+
+Removed / Deprecated (docs updated):
+- Local library.db cache & rebuild button (availability now on-demand via Overseerr; full pre-scan removed)
+- Library inclusion filter UI (TAUTULLI_INCLUDE_LIBRARIES)
+- Plex direct library inventory (Plex URL/Token fields)
+- /rebuild_library endpoint
+
+Planned / Ideas:
+- Short-lived availability cache (per tmdb_id) to reduce Overseerr round trips
+- Disk persistence for TMDb detail cache
+- Optional authentication / API token for /recommendations endpoint

@@ -760,6 +760,29 @@
                     <div style="color:red;">Gemini error: {{ recs.debug.gemini_error }}</div>
                 {% endif %}
             </div>
+            {% if recs.debug.overseerr_availability %}
+            <div style="margin-top:15px;">
+                <b>Overseerr Availability Debug:</b>
+                <div><b>Base URL:</b> {{ recs.debug.overseerr_availability.base_url or 'Not configured' }}</div>
+                <div><b>Shows Checked:</b> {{ recs.debug.overseerr_availability.shows_checked or 0 }}</div>
+                <div><b>Shows Available:</b> {{ recs.debug.overseerr_availability.shows_available or 0 }}</div>
+                <div><b>Movies Checked:</b> {{ recs.debug.overseerr_availability.movies_checked or 0 }}</div>
+                <div><b>Movies Available:</b> {{ recs.debug.overseerr_availability.movies_available or 0 }}</div>
+                <div><b>PlexUrl Hits (Shows):</b> {{ recs.debug.overseerr_availability.plexurl_hits_shows or 0 }}</div>
+                <div><b>PlexUrl Hits (Movies):</b> {{ recs.debug.overseerr_availability.plexurl_hits_movies or 0 }}</div>
+                <div><b>Duration:</b> {{ recs.debug.overseerr_availability.duration_total or 0 }}s total</div>
+                {% if recs.debug.overseerr_availability.errors %}
+                <div style="color:red;"><b>Errors:</b> 
+                    <ul>{% for error in recs.debug.overseerr_availability.errors %}<li>{{ error }}</li>{% endfor %}</ul>
+                </div>
+                {% endif %}
+                {% if recs.debug.overseerr_availability.sample_calls %}
+                <div><b>Sample API Calls:</b>
+                    <pre style="white-space:pre-wrap;max-height:300px;overflow:auto;font-size:0.9em;">{{ recs.debug.overseerr_availability.sample_calls | tojson(indent=2) }}</pre>
+                </div>
+                {% endif %}
+            </div>
+            {% endif %}
         {% endif %}
     </div>
     {% endif %}
