@@ -5,3 +5,4 @@
 *.db-journal
 __pycache__/
 *.pyc
+@package/
