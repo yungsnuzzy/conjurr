@@ -1,5 +1,5 @@
 from rapidfuzz import fuzz, process
-from flask import Flask, jsonify, render_template, request, send_from_directory, g, redirect, url_for
+from flask import Flask, jsonify, render_template, request, send_from_directory, g, redirect, url_for, abort
 import requests
 import os
 from pathlib import Path
@@ -63,6 +63,39 @@ MOOD_LABEL_MAP = {
 ROOT = Path(__file__).resolve().parent
 ENV_PATH = find_dotenv(usecwd=True) or str(ROOT / ".env")
 load_dotenv(ENV_PATH)
+
+# Helper: determine if current request is from localhost (IPv4 127.0.0.1 or IPv6 ::1)
+def _is_request_localhost(req: request) -> bool:
+    try:
+        # Honor common reverse-proxy headers first
+        xf = req.headers.get('X-Forwarded-For') or req.headers.get('X-Real-IP')
+        if xf:
+            ip = xf.split(',')[0].strip()
+        else:
+            ip = req.remote_addr
+        return ip in ('127.0.0.1', '::1', 'localhost')
+    except Exception:
+        return False
+
+# Localhost-only endpoint to toggle USER_MODE by updating .env
+@app.post('/toggle_user_mode')
+def toggle_user_mode():
+    if not _is_request_localhost(request):
+        return abort(403)
+    # Desired value optional; if missing, toggle current
+    desired = request.form.get('value')
+    current = False
+    try:
+        current = bool(getattr(g, 'USER_MODE', False))
+    except Exception:
+        current = False
+    if desired in ('0', '1'):
+        new_val = desired
+    else:
+        new_val = '0' if current else '1'
+    ok, err = save_settings({'USER_MODE': new_val})
+    # Redirect back to index; reload_settings will pick up the change automatically
+    return redirect(url_for('index', toggled='1', _ts=int(time.time())))
 
 @app.route('/favicon.ico')
 def favicon():
@@ -2454,6 +2487,8 @@ def index():
     template_name = 'table.html'
     if getattr(g, 'USER_MODE', False) and is_mobile:
         template_name = 'mobile.html'
+    # Detect if the request is coming from localhost
+    is_localhost = _is_request_localhost(request)
     # Build desktop config status panel data (no secrets displayed) shown in both user & admin modes
     user_config_status = []
     if not is_mobile:
@@ -2516,6 +2551,7 @@ def index():
     tautulli_db_path=getattr(g, 'TAUTULLI_DB_PATH', ''),
     tmdb_enabled=bool(getattr(g, 'TMDB_API_KEY', '')),
     user_mode=getattr(g, 'USER_MODE', False),
+    is_localhost=is_localhost,
     mode=(recs.get('mode') if recs else form_mode),
     decade_selected=(recs.get('decade_code') if recs else (int(form_decade) if form_decade and form_decade.isdigit() else None)),
     genre_selected=(recs.get('genre_code') if recs else form_genre),

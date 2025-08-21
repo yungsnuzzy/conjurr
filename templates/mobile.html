@@ -96,6 +96,37 @@
     </style>
 </head>
 <body>
+    {% if is_localhost %}
+    <form id="mode-toggle-form" action="/toggle_user_mode" method="post" style="position:fixed;top:8px;left:8px;z-index:30;background:#1a1a1a;border:1px solid var(--border);padding:6px 8px;border-radius:10px;display:flex;align-items:center;gap:6px;">
+        <span style="color:#ddd08a;font-size:0.85rem;">Mode:</span>
+        <style>
+            .mode-toggle { display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+            .mode-toggle input { display:none; }
+            .mode-toggle label { background:#222; color:#ccc; padding:6px 10px; cursor:pointer; font-size:0.8rem; user-select:none; }
+            .mode-toggle input:checked + label { background:var(--accent); color:#222; font-weight:600; }
+            .mode-toggle label + input + label { border-left:1px solid var(--border); }
+        </style>
+        <div class="mode-toggle">
+            <input type="radio" name="value" id="um-off" value="0" {% if not user_mode %}checked{% endif %}>
+            <label for="um-off" title="Admin Mode">Admin</label>
+            <input type="radio" name="value" id="um-on" value="1" {% if user_mode %}checked{% endif %}>
+            <label for="um-on" title="User Mode">User</label>
+        </div>
+        <button type="submit" style="margin-left:6px;padding:4px 8px;border-radius:6px;">Apply</button>
+    </form>
+    <script>
+    (function(){
+        var f=document.getElementById('mode-toggle-form');
+        if(!f) return;
+        f.addEventListener('submit', function(){
+            try{
+                var ov=document.getElementById('loading-overlay');
+                if(ov){ ov.style.display='flex'; }
+            }catch(e){}
+        });
+    })();
+    </script>
+    {% endif %}
     <div id="loading-overlay">
         <div class="loading-inner" style="background:#000;border:1px solid #222;padding:22px 26px;border-radius:18px;box-shadow:0 4px 26px rgba(0,0,0,0.7),0 0 12px rgba(0,0,0,0.55) inset;display:flex;flex-direction:column;align-items:center;">
             <img id="loading-gif" src="/static/load.gif" alt="Loading..." onerror="this.onerror=null;this.src='/static/load.gif';" />
