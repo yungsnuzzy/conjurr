@@ -968,6 +968,16 @@ function toggleCustomFields(){
     ['decade-wrap','genre-wrap','mood-wrap'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.display = show? 'block':'none'; }});
 }
 function handleMoodSelection(){
+    // Only manage these fields when Custom mode is active
+    var customRadio = document.querySelector('input[name="mode"][value="custom"]');
+    var isCustom = !!(customRadio && customRadio.checked);
+    if(!isCustom){
+        ['decade-wrap','genre-wrap'].forEach(function(id){
+            var el=document.getElementById(id);
+            if(el){ el.style.display='none'; }
+        });
+        return;
+    }
     var moodSel = document.getElementById('mood');
     if(!moodSel) return;
     var hasMood = moodSel.value && moodSel.value !== '';
@@ -995,6 +1005,15 @@ document.addEventListener('DOMContentLoaded',function(){
     radios.forEach(function(r){ r.addEventListener('change', toggleCustomFields); });
     var moodSel=document.getElementById('mood');
     if(moodSel){ moodSel.addEventListener('change', handleMoodSelection); }
+    // If we have recommendations shown and are not in custom mode, ensure filters remain hidden
+    try{
+        var hasRecs = document.body.getAttribute('data-has-recs')==='1';
+        var customRadio = document.querySelector('input[name="mode"][value="custom"]');
+        var isCustom = !!(customRadio && customRadio.checked);
+        if(hasRecs && !isCustom){
+            ['decade-wrap','genre-wrap','mood-wrap'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.display='none'; }});
+        }
+    }catch(e){}
 });
 </script>
 <script>
