@@ -174,8 +174,33 @@
     </style>
 </head>
 <body data-has-recs="{{ '1' if recs else '0' }}" data-user-mode="{{ '1' if user_mode else '0' }}">
+    {% if is_localhost %}
+    <form id="mode-toggle-form" action="/toggle_user_mode" method="post" style="position:absolute;top:18px;left:18px;z-index:30;background:#1a1a1a;border:1px solid #333;padding:6px 10px;border-radius:8px;display:flex;align-items:center;gap:8px;">
+        <span style="color:#ddd08a;font-size:0.9em;">Mode:</span>
+        <div class="mode-toggle">
+            <input type="radio" name="value" id="um-off" value="0" {% if not user_mode %}checked{% endif %}/>
+            <label for="um-off" title="Admin Mode">Admin</label>
+            <input type="radio" name="value" id="um-on" value="1" {% if user_mode %}checked{% endif %}/>
+            <label for="um-on" title="User Mode">User</label>
+        </div>
+        <button type="submit" style="margin-left:6px;padding:4px 8px;border-radius:6px;">Apply</button>
+    </form>
+    <script>
+    (function(){
+        var f=document.getElementById('mode-toggle-form');
+        if(!f) return;
+        f.addEventListener('submit', function(){
+            // Show a quick loading hint
+            try{
+                var ov=document.getElementById('loading-overlay');
+                if(ov){ ov.style.display='flex'; }
+            }catch(e){}
+        });
+    })();
+    </script>
+    {% endif %}
     {% if not user_mode %}
-    <a href="/settings" style="position:absolute;top:60px;left:18px;color:#ffe066;text-decoration:underline;font-size:1.1em;z-index:10;">⚙️ Settings</a>
+    <a href="/settings" style="position:absolute;top:80px;left:24px;color:#ffe066;text-decoration:underline;font-size:1.1em;z-index:10;">⚙️ Settings</a>
     {% endif %}
     {% if not user_mode %}
     <div class="debug-toggle">
@@ -225,7 +250,7 @@
         </style>
     </div>
     {% endif %}
-    <form method="post" style="text-align:center; margin-bottom:20px;">
+    <form id="main-form" method="post" style="text-align:center; margin-bottom:20px;">
         {% if user_mode %}
             <div style="width:100%;margin:10px auto 12px auto;display:flex;flex-direction:column;align-items:center;">
                 <label for="user_login">Enter Plex email or username:</label>
@@ -895,7 +920,7 @@
             pickLoadingGif(false);
             pickLoadingPhrase(true);
         }
-        var form = document.querySelector('form[method="post"]');
+    var form = document.getElementById('main-form');
         if (form) {
             form.addEventListener('submit', function(e) {
                 // Client-side custom mode validation
@@ -943,6 +968,16 @@ function toggleCustomFields(){
     ['decade-wrap','genre-wrap','mood-wrap'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.display = show? 'block':'none'; }});
 }
 function handleMoodSelection(){
+    // Only manage these fields when Custom mode is active
+    var customRadio = document.querySelector('input[name="mode"][value="custom"]');
+    var isCustom = !!(customRadio && customRadio.checked);
+    if(!isCustom){
+        ['decade-wrap','genre-wrap'].forEach(function(id){
+            var el=document.getElementById(id);
+            if(el){ el.style.display='none'; }
+        });
+        return;
+    }
     var moodSel = document.getElementById('mood');
     if(!moodSel) return;
     var hasMood = moodSel.value && moodSel.value !== '';
@@ -970,6 +1005,15 @@ document.addEventListener('DOMContentLoaded',function(){
     radios.forEach(function(r){ r.addEventListener('change', toggleCustomFields); });
     var moodSel=document.getElementById('mood');
     if(moodSel){ moodSel.addEventListener('change', handleMoodSelection); }
+    // If we have recommendations shown and are not in custom mode, ensure filters remain hidden
+    try{
+        var hasRecs = document.body.getAttribute('data-has-recs')==='1';
+        var customRadio = document.querySelector('input[name="mode"][value="custom"]');
+        var isCustom = !!(customRadio && customRadio.checked);
+        if(hasRecs && !isCustom){
+            ['decade-wrap','genre-wrap','mood-wrap'].forEach(function(id){ var el=document.getElementById(id); if(el){ el.style.display='none'; }});
+        }
+    }catch(e){}
 });
 </script>
 <script>
@@ -997,7 +1041,7 @@ function zPopulateFromCookies(){
 }
 
 function zStoreOnSubmit(){
-    var form = document.querySelector('form[method="post"]');
+    var form = document.getElementById('main-form');
     if(!form) return;
     form.addEventListener('submit', function(){
         var user=document.getElementById('user_login'); if(user) zSetCookie('z_user_login', user.value||'', 30);

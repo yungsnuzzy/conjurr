@@ -1,9 +1,10 @@
 from rapidfuzz import fuzz, process
-from flask import Flask, jsonify, render_template, request, send_from_directory, g, redirect, url_for
+from flask import Flask, jsonify, render_template, request, send_from_directory, g, redirect, url_for, abort
 import requests
 import os
 from pathlib import Path
 from dotenv import load_dotenv, set_key, dotenv_values, find_dotenv
+import configparser
 from usage_tracker import record_usage, get_usage_today
 from collections import Counter
 # Prefer new google-genai SDK; fall back to legacy google-generativeai if present
@@ -42,7 +43,7 @@ static_dir = os.path.join(base_path, 'static')
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
 # App version (displayed in UI)
-VERSION = "v3.5 beta (The 'name_not_found' update)"
+VERSION = "v3.6 beta (The 'end user' update)"
 
 # User Mode (1 or 0): when enabled, hide settings/debug/library status and require Plex email/username prompt
 USER_MODE = 0
@@ -59,10 +60,111 @@ MOOD_LABEL_MAP = {
 }
 
 
-# Load .env file
+# Load .env file (used in dev; for frozen EXE we'll use settings.ini)
 ROOT = Path(__file__).resolve().parent
 ENV_PATH = find_dotenv(usecwd=True) or str(ROOT / ".env")
 load_dotenv(ENV_PATH)
+
+# Runtime path helpers
+def is_frozen() -> bool:
+    return bool(getattr(sys, 'frozen', False))
+
+def get_runtime_dir() -> str:
+    # For frozen EXE, use the folder containing the executable
+    if is_frozen():
+        try:
+            return os.path.dirname(sys.executable)
+        except Exception:
+            return os.getcwd()
+    # For dev, use the project src dir
+    return os.path.dirname(os.path.abspath(__file__))
+
+def get_appdata_dir() -> str:
+    # Fallback writable location on Windows
+    base = os.environ.get('APPDATA') or os.path.expanduser('~')
+    path = os.path.join(base, 'Conjurr')
+    try:
+        os.makedirs(path, exist_ok=True)
+    except Exception:
+        pass
+    return path
+
+def get_settings_ini_paths() -> tuple[str, str]:
+    primary = os.path.join(get_runtime_dir(), 'settings.ini')
+    fallback = os.path.join(get_appdata_dir(), 'settings.ini')
+    return primary, fallback
+
+def read_settings_ini() -> dict:
+    cfg = configparser.ConfigParser()
+    primary, fallback = get_settings_ini_paths()
+    path = primary if os.path.exists(primary) else (fallback if os.path.exists(fallback) else None)
+    data = {}
+    if path:
+        try:
+            cfg.read(path, encoding='utf-8')
+            sect = 'conjurr'
+            if cfg.has_section(sect):
+                for k, v in cfg.items(sect):
+                    data[k.upper()] = v
+        except Exception:
+            pass
+    return data
+
+def write_settings_ini(values: dict) -> tuple[bool, str|None]:
+    cfg = configparser.ConfigParser()
+    sect = 'conjurr'
+    # Load existing
+    existing = read_settings_ini()
+    cfg[sect] = {}
+    # Merge existing with new values (new values win)
+    merged = {**existing, **{k.upper(): ('' if v is None else str(v)) for k, v in values.items()}}
+    for k, v in merged.items():
+        cfg[sect][k] = str(v)
+    primary, fallback = get_settings_ini_paths()
+    # Try primary (next to EXE) first
+    for target in (primary, fallback):
+        try:
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            with open(target, 'w', encoding='utf-8') as f:
+                cfg.write(f)
+            return True, None
+        except Exception as e:
+            last_err = str(e)
+            continue
+    return False, last_err if 'last_err' in locals() else 'Unknown error writing settings.ini'
+
+# Helper: determine if current request is from localhost (IPv4 127.0.0.1 or IPv6 ::1)
+def _is_request_localhost(req: request) -> bool:
+    try:
+        # Honor common reverse-proxy headers first
+        xf = req.headers.get('X-Forwarded-For') or req.headers.get('X-Real-IP')
+        if xf:
+            ip = xf.split(',')[0].strip()
+        else:
+            ip = req.remote_addr
+        return ip in ('127.0.0.1', '::1', 'localhost')
+    except Exception:
+        return False
+
+# Localhost-only endpoint to toggle USER_MODE by updating .env
+@app.post('/toggle_user_mode')
+def toggle_user_mode():
+    if not _is_request_localhost(request):
+        return abort(403)
+    # Desired value optional; if missing, toggle current
+    desired = request.form.get('value')
+    current = False
+    try:
+        current = bool(getattr(g, 'USER_MODE', False))
+    except Exception:
+        current = False
+    if desired in ('0', '1'):
+        new_val = desired
+    else:
+        new_val = '0' if current else '1'
+    ok, err = save_settings({'USER_MODE': new_val})
+    # Redirect back to index; reload_settings will pick up the change automatically
+    return redirect(url_for('index', toggled='1', _ts=int(time.time())))
 
 @app.route('/favicon.ico')
 def favicon():
@@ -93,40 +195,66 @@ print(f"Static exists: {os.path.exists(static_dir)}")
 
 # Config: Load from .env or environment
 def get_settings():
-    # Prefer .env values the app manages; fall back to OS env if missing
-    vals = dotenv_values(ENV_PATH)
-    # Default DB path on Windows: %LOCALAPPDATA%/Tautulli/Tautulli.db
-    default_db = None
+    # Defaults
+    defaults = {
+        'TAUTULLI_URL': 'http://localhost:8181',
+        'TAUTULLI_API_KEY': '',
+        'GOOGLE_API_KEY': '',
+        'TAUTULLI_DB_PATH': '',
+        'USER_MODE': str(USER_MODE),
+        'GEMINI_DAILY_QUOTAS': '',
+        'TMDB_API_KEY': '',
+        'OVERSEERR_URL': '',
+        'OVERSEERR_API_KEY': '',
+        'GEMINI_MODEL': '',
+        'PLEX_URL': '',
+        'PLEX_TOKEN': '',
+    }
+    # Suggested default DB path (Windows)
     try:
         localapp = os.environ.get('LOCALAPPDATA')
         if localapp:
-            candidate = os.path.join(localapp, 'Tautulli', 'Tautulli.db')
-            default_db = candidate
+            defaults['TAUTULLI_DB_PATH'] = os.path.join(localapp, 'Tautulli', 'Tautulli.db')
     except Exception:
-        default_db = None
-    return {
-        'TAUTULLI_URL': vals.get('TAUTULLI_URL') or os.environ.get('TAUTULLI_URL', 'http://localhost:8181'),
-        'TAUTULLI_API_KEY': vals.get('TAUTULLI_API_KEY') or os.environ.get('TAUTULLI_API_KEY', ''),
-        'GOOGLE_API_KEY': vals.get('GOOGLE_API_KEY') or os.environ.get('GOOGLE_API_KEY', ''),
-        'TAUTULLI_DB_PATH': vals.get('TAUTULLI_DB_PATH') or os.environ.get('TAUTULLI_DB_PATH', default_db or ''),
-    'USER_MODE': vals.get('USER_MODE') or os.environ.get('USER_MODE', str(USER_MODE)),
-    'GEMINI_DAILY_QUOTAS': vals.get('GEMINI_DAILY_QUOTAS') or os.environ.get('GEMINI_DAILY_QUOTAS', ''),
-    'TMDB_API_KEY': vals.get('TMDB_API_KEY') or os.environ.get('TMDB_API_KEY', ''),
-    'OVERSEERR_URL': vals.get('OVERSEERR_URL') or os.environ.get('OVERSEERR_URL', ''),
-    'OVERSEERR_API_KEY': vals.get('OVERSEERR_API_KEY') or os.environ.get('OVERSEERR_API_KEY', ''),
-    'GEMINI_MODEL': vals.get('GEMINI_MODEL') or os.environ.get('GEMINI_MODEL', ''),
-    # Removed TAUTULLI_INCLUDE_LIBRARIES (library filter deprecated)
-    'PLEX_URL': vals.get('PLEX_URL') or os.environ.get('PLEX_URL', ''),
-    'PLEX_TOKEN': vals.get('PLEX_TOKEN') or os.environ.get('PLEX_TOKEN', ''),
-    }
+        pass
+    # If running frozen, prefer INI; else use .env
+    if is_frozen():
+        ini_vals = read_settings_ini()
+        if not ini_vals:
+            # Migrate from .env if exists
+            try:
+                env_vals = dotenv_values(ENV_PATH)
+            except Exception:
+                env_vals = {}
+            if env_vals:
+                write_settings_ini(env_vals)
+                ini_vals = read_settings_ini()
+        # Merge ini over defaults
+        merged = {**defaults, **{k: ini_vals.get(k, defaults.get(k, '')) for k in defaults.keys()}}
+        return merged
+    else:
+        # Dev: .env values override defaults, else OS env
+        vals = {}
+        try:
+            vals = dotenv_values(ENV_PATH)
+        except Exception:
+            vals = {}
+        result = {}
+        for k in defaults.keys():
+            result[k] = vals.get(k) or os.environ.get(k, defaults[k])
+        return result
 
 def save_settings(new_settings):
+    # Persist settings depending on runtime: INI for frozen, .env for dev
     try:
-        for k, v in new_settings.items():
-            set_key(ENV_PATH, k, v)
-        # Refresh process env so subsequent reads can see latest values
-        load_dotenv(ENV_PATH, override=True)
-        return True, None
+        if is_frozen():
+            ok, err = write_settings_ini(new_settings)
+            return (ok, err)
+        else:
+            for k, v in new_settings.items():
+                set_key(ENV_PATH, k, '' if v is None else str(v))
+            load_dotenv(ENV_PATH, override=True)
+            return True, None
     except Exception as e:
         return False, str(e)
 
@@ -2454,6 +2582,8 @@ def index():
     template_name = 'table.html'
     if getattr(g, 'USER_MODE', False) and is_mobile:
         template_name = 'mobile.html'
+    # Detect if the request is coming from localhost
+    is_localhost = _is_request_localhost(request)
     # Build desktop config status panel data (no secrets displayed) shown in both user & admin modes
     user_config_status = []
     if not is_mobile:
@@ -2516,6 +2646,7 @@ def index():
     tautulli_db_path=getattr(g, 'TAUTULLI_DB_PATH', ''),
     tmdb_enabled=bool(getattr(g, 'TMDB_API_KEY', '')),
     user_mode=getattr(g, 'USER_MODE', False),
+    is_localhost=is_localhost,
     mode=(recs.get('mode') if recs else form_mode),
     decade_selected=(recs.get('decade_code') if recs else (int(form_decade) if form_decade and form_decade.isdigit() else None)),
     genre_selected=(recs.get('genre_code') if recs else form_genre),
