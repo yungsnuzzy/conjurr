@@ -45,7 +45,7 @@ app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 VERSION = "v3.5 beta (The 'name_not_found' update)"
 
 # User Mode (1 or 0): when enabled, hide settings/debug/library status and require Plex email/username prompt
-USER_MODE = 1
+USER_MODE = 0
 
 # Global mood mapping for templates
 MOOD_LABEL_MAP = {
