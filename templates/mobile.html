@@ -149,7 +149,7 @@
 
         <h2 style="text-align:center; font-size:1.1rem; margin: 4px 0 6px;">History Based Content Recommendations</h2>
 
-        <form method="post">
+    <form id="main-form" method="post">
             <label for="user_login">Enter Plex email or username:</label>
             <input name="user_login" id="user_login" value="{{ user_login_value or '' }}" type="text" placeholder="name@example.com or username" />
             {% if user_login_error %}
@@ -444,7 +444,7 @@
             handleMoodSelectionMobile();
         }
         function zStoreOnSubmit(){
-            var form=document.querySelector('form[method="post"]'); if(!form) return;
+            var form=document.getElementById('main-form'); if(!form) return;
             form.addEventListener('submit', function(){
                 var user=document.getElementById('user_login'); if(user) zSetCookie('z_user_login', user.value||'', 30);
                 var modeVal=(document.querySelector('input[name="mode"]:checked')||{}).value || 'history'; zSetCookie('z_mode', modeVal, 30);
@@ -454,7 +454,7 @@
             });
         }
         document.addEventListener('DOMContentLoaded', function() {
-            var form = document.querySelector('form[method="post"]');
+            var form = document.getElementById('main-form');
             if (form) {
                 form.addEventListener('submit', function(e) {
                     var modeVal = (document.querySelector('input[name="mode"]:checked')||{}).value;

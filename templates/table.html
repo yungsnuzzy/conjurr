@@ -250,7 +250,7 @@
         </style>
     </div>
     {% endif %}
-    <form method="post" style="text-align:center; margin-bottom:20px;">
+    <form id="main-form" method="post" style="text-align:center; margin-bottom:20px;">
         {% if user_mode %}
             <div style="width:100%;margin:10px auto 12px auto;display:flex;flex-direction:column;align-items:center;">
                 <label for="user_login">Enter Plex email or username:</label>
@@ -920,7 +920,7 @@
             pickLoadingGif(false);
             pickLoadingPhrase(true);
         }
-        var form = document.querySelector('form[method="post"]');
+    var form = document.getElementById('main-form');
         if (form) {
             form.addEventListener('submit', function(e) {
                 // Client-side custom mode validation
@@ -1022,7 +1022,7 @@ function zPopulateFromCookies(){
 }
 
 function zStoreOnSubmit(){
-    var form = document.querySelector('form[method="post"]');
+    var form = document.getElementById('main-form');
     if(!form) return;
     form.addEventListener('submit', function(){
         var user=document.getElementById('user_login'); if(user) zSetCookie('z_user_login', user.value||'', 30);

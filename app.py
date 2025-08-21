@@ -42,7 +42,7 @@ static_dir = os.path.join(base_path, 'static')
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
 # App version (displayed in UI)
-VERSION = "v3.5 beta (The 'name_not_found' update)"
+VERSION = "v3.6 beta (The 'end user' update)"
 
 # User Mode (1 or 0): when enabled, hide settings/debug/library status and require Plex email/username prompt
 USER_MODE = 0
