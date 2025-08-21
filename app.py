@@ -2,7 +2,8 @@ from rapidfuzz import fuzz, process
 from flask import Flask, jsonify, render_template, request, send_from_directory, g, redirect, url_for
 import requests
 import os
-from dotenv import load_dotenv, set_key, dotenv_values
+from pathlib import Path
+from dotenv import load_dotenv, set_key, dotenv_values, find_dotenv
 from usage_tracker import record_usage, get_usage_today
 from collections import Counter
 # Prefer new google-genai SDK; fall back to legacy google-generativeai if present
@@ -59,7 +60,8 @@ MOOD_LABEL_MAP = {
 
 
 # Load .env file
-ENV_PATH = os.path.join(base_path, '.env')
+ROOT = Path(__file__).resolve().parent
+ENV_PATH = find_dotenv(usecwd=True) or str(ROOT / ".env")
 load_dotenv(ENV_PATH)
 
 @app.route('/favicon.ico')
