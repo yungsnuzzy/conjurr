@@ -29,6 +29,11 @@ COPY . .
 RUN if [ -n "$PGID" ] && [ -n "$PUID" ]; then \
         groupadd -g $PGID app && \
         useradd --create-home --shell /bin/bash -u $PUID -g $PGID app; \
+    elif [ -n "$PUID" ]; then \
+        useradd --create-home --shell /bin/bash -u $PUID app; \
+    elif [ -n "$PGID" ]; then \
+        groupadd -g $PGID app && \
+        useradd --create-home --shell /bin/bash -g $PGID app; \
     else \
         useradd --create-home --shell /bin/bash app; \
     fi && \
