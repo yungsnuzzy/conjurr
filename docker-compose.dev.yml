@@ -14,6 +14,8 @@ services:
       - USER_MODE=${USER_MODE}
       - OVERSEERR_URL=${OVERSEERR_URL}
       - OVERSEERR_API_KEY=${OVERSEERR_API_KEY}
+      - PGID=1001
+      - PUID=1001
     volumes:
       - ./templates:/app/templates
       - ./static:/app/static

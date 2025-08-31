@@ -25,7 +25,13 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 # Create non-root user for security
-RUN useradd --create-home --shell /bin/bash app && \
+# Use custom PGID/PUID if specified, otherwise use defaults
+RUN if [ -n "$PGID" ] && [ -n "$PUID" ]; then \
+        groupadd -g $PGID app && \
+        useradd --create-home --shell /bin/bash -u $PUID -g $PGID app; \
+    else \
+        useradd --create-home --shell /bin/bash app; \
+    fi && \
     chown -R app:app /app
 USER app
 
