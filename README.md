@@ -43,7 +43,7 @@ Conjurr analyzes Plex watch history via Tautulli, resolves TMDb IDs, and uses Go
 
 2. **Run with Docker Compose:**
    ```bash
-   docker-compose up --build
+   docker-compose up
    ```
 
 3. **Access the application:**
