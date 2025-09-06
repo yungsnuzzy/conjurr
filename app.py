@@ -1,7 +1,7 @@
 from rapidfuzz import fuzz, process
 from flask import Flask, jsonify, render_template, request, send_from_directory, g, redirect, url_for, abort
 import requests
-import os
+import os, shutil
 from pathlib import Path
 from dotenv import load_dotenv, set_key, dotenv_values, find_dotenv
 import configparser
@@ -62,7 +62,10 @@ MOOD_LABEL_MAP = {
 
 # Load .env file (used in dev; for frozen EXE we'll use settings.ini)
 ROOT = Path(__file__).resolve().parent
-ENV_PATH = find_dotenv(usecwd=True) or str(ROOT / ".env")
+if os.path.exists(ROOT / ".env"):
+    os.makedirs(ROOT / "env", exist_ok = True)
+    shutil.move(ROOT / ".env", ROOT / "env" / ".env")
+ENV_PATH = find_dotenv(usecwd=True) or str(ROOT / "env" / ".env")
 load_dotenv(ENV_PATH)
 
 # Runtime path helpers
