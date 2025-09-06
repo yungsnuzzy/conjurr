@@ -55,16 +55,30 @@
             </div>
         {% endif %}
     <form method="post" id="settings-form" autocomplete="off" enctype="multipart/form-data">
-        <h3>Core Tautulli Connection</h3>
+        <h3>Plex Server Connection</h3>
         <div class="grid">
             <div class="field">
-                <label for="TAUTULLI_URL">Tautulli URL {% if 'TAUTULLI_URL' in missing %}<span class="required">REQ</span>{% endif %}</label>
-                <input type="text" id="TAUTULLI_URL" name="TAUTULLI_URL" value="{{ settings.TAUTULLI_URL }}" required>
+                <label for="PLEX_URL">Plex Server URL {% if 'PLEX_URL' in missing %}<span class="required">REQ</span>{% endif %}</label>
+                <input type="text" id="PLEX_URL" name="PLEX_URL" value="{{ settings.PLEX_URL }}" placeholder="http://localhost:32400" required>
+                <div class="hint">Base URL to your Plex server for direct availability checks.</div>
+            </div>
+            <div class="field">
+                <label for="PLEX_TOKEN">Plex Token {% if 'PLEX_TOKEN' in missing %}<span class="required">REQ</span>{% endif %}</label>
+                <input type="password" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ settings.PLEX_TOKEN }}" placeholder="Your Plex authentication token" required>
+                <div class="hint">X-Plex-Token for authenticating with Plex API. <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/" target="_blank">How to find your token</a></div>
+            </div>
+        </div>
+
+        <h3>Core Tautulli Connection <span class="inline-badge">Optional</span></h3>
+        <div class="grid">
+            <div class="field">
+                <label for="TAUTULLI_URL">Tautulli URL <span class="inline-badge">Optional</span></label>
+                <input type="text" id="TAUTULLI_URL" name="TAUTULLI_URL" value="{{ settings.TAUTULLI_URL }}">
                 <div class="hint">Base URL to your Tautulli instance (no trailing slash). Example: <code>http://localhost:8181</code></div>
             </div>
             <div class="field">
-                <label for="TAUTULLI_API_KEY">Tautulli API Key {% if 'TAUTULLI_API_KEY' in missing %}<span class="required">REQ</span>{% endif %}</label>
-                <input type="password" id="TAUTULLI_API_KEY" name="TAUTULLI_API_KEY" value="{{ settings.TAUTULLI_API_KEY }}" required>
+                <label for="TAUTULLI_API_KEY">Tautulli API Key <span class="inline-badge">Optional</span></label>
+                <input type="password" id="TAUTULLI_API_KEY" name="TAUTULLI_API_KEY" value="{{ settings.TAUTULLI_API_KEY }}">
                 <div class="hint">Generate in Tautulli: Settings → Web Interface → API.</div>
             </div>
             <div class="field" style="grid-column:1 / -1;">
@@ -142,7 +156,7 @@
     {% if redirect_main %}
     <script>
         setTimeout(function() {
-            window.location.href = "/";
+            window.location.href = "{{ url_for('index') }}";
         }, 1000);
     </script>
     {% endif %}
@@ -161,6 +175,7 @@
                     el.type = 'password';
                 });
             }
+            secureField('PLEX_TOKEN');
             secureField('TAUTULLI_API_KEY');
             secureField('GOOGLE_API_KEY');
             secureField('TMDB_API_KEY');

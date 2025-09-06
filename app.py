@@ -43,7 +43,7 @@ static_dir = os.path.join(base_path, 'static')
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
 # App version (displayed in UI)
-VERSION = "v3.6 beta (The 'end user' update)"
+VERSION = "v3.7 beta (The 'matchymatchy' update)"
 
 # User Mode (1 or 0): when enabled, hide settings/debug/library status and require Plex email/username prompt
 USER_MODE = 0
@@ -171,6 +171,41 @@ def favicon():
     return send_from_directory(os.path.join(app.static_folder, 'APP ICONS'), '32.ico', mimetype='image/x-icon')
 
 # Debug route to test if Flask is working
+@app.route('/test_plex')
+def test_plex():
+    """Test endpoint to verify Plex connection"""
+    try:
+        plex = get_plex_client()
+        if plex is None:
+            return jsonify({
+                "success": False,
+                "error": "Plex not configured (missing URL or token)"
+            })
+        
+        # Test connection
+        connection_ok = plex.test_connection()
+        if not connection_ok:
+            return jsonify({
+                "success": False,
+                "error": "Cannot connect to Plex server"
+            })
+        
+        # Get library info
+        libraries = plex.get_libraries()
+        
+        return jsonify({
+            "success": True,
+            "connection": "OK",
+            "libraries": libraries,
+            "library_count": len(libraries)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        })
+
 @app.route('/debug')
 def debug():
     return f"""
@@ -207,8 +242,9 @@ def get_settings():
         'OVERSEERR_URL': '',
         'OVERSEERR_API_KEY': '',
         'GEMINI_MODEL': '',
-        'PLEX_URL': '',
+        'PLEX_URL': 'http://localhost:32400',
         'PLEX_TOKEN': '',
+        'TAUTULLI_CACHE_REBUILD_TIME': '03:00',
     }
     # Suggested default DB path (Windows)
     try:
@@ -321,6 +357,139 @@ def reload_settings():
         except Exception:
             g.genai_client = None
             g.genai_sdk = None
+
+
+# Plex API Client for direct availability checking
+class PlexClient:
+    def __init__(self, base_url, token):
+        self.base_url = base_url.rstrip('/')
+        self.token = token
+        self.headers = {
+            'X-Plex-Token': token,
+            'Accept': 'application/json'
+        }
+        self._libraries_cache = None
+        self._library_content_cache = {}
+        
+    def test_connection(self):
+        """Test Plex server connection"""
+        try:
+            r = requests.get(f"{self.base_url}/", headers=self.headers, timeout=10)
+            return r.status_code == 200
+        except Exception:
+            return False
+    
+    def get_libraries(self):
+        """Get all library sections"""
+        if self._libraries_cache is not None:
+            return self._libraries_cache
+            
+        try:
+            r = requests.get(f"{self.base_url}/library/sections", headers=self.headers, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                libraries = []
+                for section in data.get('MediaContainer', {}).get('Directory', []):
+                    if section.get('type') in ['movie', 'show']:
+                        libraries.append({
+                            'key': section.get('key'),
+                            'title': section.get('title'),
+                            'type': section.get('type')
+                        })
+                self._libraries_cache = libraries
+                return libraries
+        except Exception as e:
+            print(f"Error getting Plex libraries: {e}")
+        return []
+    
+    def get_library_content_titles(self, library_key, library_type):
+        """Get all titles from a specific library"""
+        cache_key = f"{library_key}_{library_type}"
+        if cache_key in self._library_content_cache:
+            return self._library_content_cache[cache_key]
+            
+        titles = set()
+        try:
+            # Get all items from this library
+            url = f"{self.base_url}/library/sections/{library_key}/all"
+            r = requests.get(url, headers=self.headers, timeout=30)
+            
+            if r.status_code == 200:
+                data = r.json()
+                for item in data.get('MediaContainer', {}).get('Metadata', []):
+                    title = item.get('title', '').strip()
+                    if title:
+                        # Use the new title variations function
+                        variations = get_title_variations(title)
+                        titles.update(variations)
+                            
+        except Exception as e:
+            print(f"Error getting library content for {library_key}: {e}")
+        
+        self._library_content_cache[cache_key] = titles
+        return titles
+    
+    def build_availability_cache(self):
+        """Build a complete cache of all available titles"""
+        all_titles = {'movie': set(), 'show': set()}
+        
+        libraries = self.get_libraries()
+        for library in libraries:
+            library_key = library['key']
+            library_type = library['type']
+            
+            if library_type in ['movie', 'show']:
+                print(f"Scanning Plex library: {library['title']} ({library_type})")
+                titles = self.get_library_content_titles(library_key, library_type)
+                all_titles[library_type].update(titles)
+        
+        return all_titles
+    
+    def batch_check_availability(self, items, media_type):
+        """Batch check availability for multiple items"""
+        # Get all available titles for this media type
+        libraries = self.get_libraries()
+        available_titles = set()
+        
+        for library in libraries:
+            if library['type'] == media_type:
+                titles = self.get_library_content_titles(library['key'], media_type)
+                available_titles.update(titles)
+        
+        # Check each item against available titles
+        results = {}
+        for item in items:
+            title = item.get('title') if isinstance(item, dict) else item
+            if title:
+                # Generate all variations of the AI title for matching
+                ai_variations = get_title_variations(title)
+                
+                # Use only exact set-based matching (no substring fallback)
+                # This prevents false positives like "Mythbusters Jr." matching "Mythbusters"
+                is_available = bool(ai_variations & available_titles)
+                
+                results[title] = is_available
+        
+        return results
+
+
+# Global Plex client instance
+plex_client = None
+
+def get_plex_client():
+    """Get or create Plex client instance"""
+    global plex_client
+    settings = get_settings()
+    plex_url = settings.get('PLEX_URL', '').strip()
+    plex_token = settings.get('PLEX_TOKEN', '').strip()
+    
+    if not plex_url or not plex_token:
+        return None
+        
+    if plex_client is None or plex_client.base_url != plex_url.rstrip('/') or plex_client.token != plex_token:
+        plex_client = PlexClient(plex_url, plex_token)
+        
+    return plex_client
 
 
 _USER_CACHE = { 'users': None, 'hash': None, 'ts': 0 }
@@ -522,9 +691,98 @@ def normalize_title(title: str) -> str:
     if not title:
         return ''
     t = title.lower()
+    
+    # Handle common character/word substitutions before removing special chars
+    # Convert & to "and" 
+    t = re.sub(r'\s*&\s*', ' and ', t)
+    t = re.sub(r'\s*\+\s*', ' and ', t)
+    
+    # Preserve important differentiators before normalization
+    # Keep Jr, Sr, III, etc. as they are significant differentiators
+    important_suffixes = ['jr', 'sr', 'ii', 'iii', 'iv', 'v']
+    preserved_suffix = ''
+    for suffix in important_suffixes:
+        pattern = rf'\b{suffix}\.?\s*$'
+        if re.search(pattern, t):
+            preserved_suffix = f' {suffix}'
+            t = re.sub(pattern, '', t).strip()
+            break
+    
+    # Remove all non-alphanumeric except spaces
     t = re.sub(r'[^a-z0-9 ]', '', t)
+    
+    # Normalize common word variations
+    t = re.sub(r'\band\b', '', t)  # Remove "and" completely for better matching
+    t = re.sub(r'\bthe\b', '', t)  # Remove articles
+    t = re.sub(r'\ba\b', '', t)
+    t = re.sub(r'\ban\b', '', t)
+    
+    # Clean up multiple spaces and add back preserved suffix
     t = re.sub(r'\s+', ' ', t).strip()
-    return t
+    t += preserved_suffix
+    return t.strip()
+
+def get_title_variations(title: str) -> set[str]:
+    """Generate multiple variations of a title for better matching"""
+    if not title:
+        return set()
+    
+    variations = set()
+    title_lower = title.lower()
+    
+    # Always add the normalized version
+    normalized = normalize_title(title)
+    if normalized:
+        variations.add(normalized)
+    
+    # Add original lowercased
+    variations.add(title_lower)
+    
+    # Remove common version suffixes for core matching
+    version_suffixes = [
+        r'\s+xl\b',           # "QI XL" -> "QI"
+        r'\s+extended\b',     # "Movie Extended" -> "Movie"
+        r'\s+uncut\b',        # "Movie Uncut" -> "Movie"
+        r'\s+directors?\s*cut\b',  # "Movie Director's Cut" -> "Movie" (handles apostrophe)
+        r'\s+ultimate\s+edition\b', # "Movie Ultimate Edition" -> "Movie"
+        r'\s+special\s+edition\b',  # "Movie Special Edition" -> "Movie"
+        r'\s+remastered\b',   # "Movie Remastered" -> "Movie"
+        r'\s+redux\b',        # "Movie Redux" -> "Movie"
+        r'\s+\d+th\s+anniversary\b',  # "Movie 25th Anniversary" -> "Movie"
+    ]
+    
+    for suffix_pattern in version_suffixes:
+        base_title = re.sub(suffix_pattern, '', title_lower)
+        if base_title != title_lower:
+            variations.add(base_title)
+            # Also add normalized version of base title
+            base_normalized = normalize_title(base_title)
+            if base_normalized:
+                variations.add(base_normalized)
+    
+    # Remove articles from beginning
+    for article in ['the ', 'a ', 'an ']:
+        if title_lower.startswith(article):
+            variant = title_lower[len(article):]
+            variations.add(variant)
+            # Add normalized version of variant too
+            variant_normalized = normalize_title(variant)
+            if variant_normalized:
+                variations.add(variant_normalized)
+    
+    # Remove year from title if present
+    year_pattern = r'\s*\(\d{4}\)\s*$'
+    title_no_year = re.sub(year_pattern, '', title_lower)
+    if title_no_year != title_lower:
+        variations.add(title_no_year)
+        # Add normalized version without year
+        no_year_normalized = normalize_title(title_no_year)
+        if no_year_normalized:
+            variations.add(no_year_normalized)
+    
+    # Remove empty strings
+    variations.discard('')
+    return variations
 
 def fuzzy_available(ai_list, library_list, watched_set, threshold=80):
     """Deprecated full fuzzy matcher retained as a fallback if enabled.
@@ -1788,36 +2046,84 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
         tmdb_map = {}
         if not items:
             return [], [], {}, 0.0
-        workers = min(12, len(items))
-        def job(it):
+        
+        start_batch = time.time()
+        
+        # Get Plex client for availability checking
+        plex = get_plex_client()
+        if plex is None:
+            print("Warning: Plex not configured, marking all items as unavailable")
+            # If Plex not configured, mark all as unavailable
+            for it in items:
+                title = it.get('title') if isinstance(it, dict) else it
+                year = it.get('year') if isinstance(it, dict) else None
+                tmdb_id = pre_map.get(title)
+                if not tmdb_id:
+                    tmdb_id = _tmdb_search_id(title, year, media_type)
+                    if isinstance(it, dict): 
+                        it['tmdb_id'] = tmdb_id
+                
+                results.append({
+                    'ai_title': title, 
+                    'ai_year': year, 
+                    'tmdb_id': tmdb_id, 
+                    'plex_available': False, 
+                    'plex_url': False
+                })
+                
+                if tmdb_id:
+                    tmdb_map[title] = tmdb_id
+                    
+            available_titles = []
+            return results, available_titles, tmdb_map, time.time() - start_batch
+        
+        # Step 1: Batch check Plex availability for all items
+        plex_availability = plex.batch_check_availability(items, media_type)
+        
+        # Step 2: Process TMDb IDs in batches for items that need them
+        items_needing_tmdb = []
+        for it in items:
+            title = it.get('title') if isinstance(it, dict) else it
+            if title and not pre_map.get(title):
+                items_needing_tmdb.append(it)
+        
+        # Resolve TMDb IDs in smaller batches
+        if items_needing_tmdb:
+            batch_size = 5
+            for i in range(0, len(items_needing_tmdb), batch_size):
+                batch = items_needing_tmdb[i:i + batch_size]
+                for it in batch:
+                    title = it.get('title') if isinstance(it, dict) else it
+                    year = it.get('year') if isinstance(it, dict) else None
+                    tmdb_id = _tmdb_search_id(title, year, media_type)
+                    if isinstance(it, dict): 
+                        it['tmdb_id'] = tmdb_id
+                    if tmdb_id:
+                        pre_map[title] = tmdb_id
+        
+        # Step 3: Build final results
+        for it in items:
             title = it.get('title') if isinstance(it, dict) else it
             year = it.get('year') if isinstance(it, dict) else None
-            # Always prefer pre-resolved TMDb ID; fallback to lightweight search only if still missing
+            
+            # Get TMDb ID
             tmdb_id = pre_map.get(title)
-            if not tmdb_id:
-                tmdb_id = _tmdb_search_id(title, year, media_type)
-                if isinstance(it, dict): it['tmdb_id'] = tmdb_id
-            avail = None
-            plex_hit = False
+            
+            # Get availability from Plex batch results
+            plex_avail = plex_availability.get(title, False)
+            
+            results.append({
+                'ai_title': title, 
+                'ai_year': year, 
+                'tmdb_id': tmdb_id, 
+                'plex_available': plex_avail, 
+                'plex_url': plex_avail
+            })
+            
             if tmdb_id:
-                avail, plex_hit = _overseerr_available(tmdb_id, media_type, overseerr_url, overseerr_key, overseerr_errors)
-            return {'ai_title': title, 'ai_year': year, 'tmdb_id': tmdb_id, 'overseerr_available': avail, 'plex_url': plex_hit}
-        start_batch = time.time()
-        if workers <= 1:
-            for it in items:
-                results.append(job(it))
-        else:
-            with ThreadPoolExecutor(max_workers=workers) as ex:
-                futs = {ex.submit(job, it): it for it in items}
-                for f in as_completed(futs):
-                    try:
-                        results.append(f.result())
-                    except Exception:
-                        pass
-        for r in results:
-            if r.get('tmdb_id'):
-                tmdb_map[r['ai_title']] = r['tmdb_id']
-        available_titles = [r['ai_title'] for r in results if r.get('overseerr_available') and r.get('ai_title') not in watched_set_all]
+                tmdb_map[title] = tmdb_id
+        
+        available_titles = [r['ai_title'] for r in results if r.get('plex_available') and r.get('ai_title') not in watched_set_all]
         return results, available_titles, tmdb_map, time.time() - start_batch
 
     show_matches, rec_shows, tmdb_map_shows, dur_shows = _resolve(ai_shows, 'show', tmdb_pre_map_shows)
@@ -1825,20 +2131,18 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
     tmdb_map_all = {**tmdb_map_shows, **tmdb_map_movies}
     timing['availability'] = dur_shows + dur_movies
     timing['fuzzy_match'] = timing['availability']  # maintain legacy key
-    debug['overseerr_availability'] = {
+    debug['plex_availability'] = {
         'shows_checked': len(ai_shows),
         'movies_checked': len(ai_movies),
         'shows_available': len(rec_shows),
         'movies_available': len(rec_movies),
-        'plexurl_hits_shows': sum(1 for m in show_matches if m.get('plex_url')),
-        'plexurl_hits_movies': sum(1 for m in movie_matches if m.get('plex_url')),
+        'plex_hits_shows': sum(1 for m in show_matches if m.get('plex_url')),
+        'plex_hits_movies': sum(1 for m in movie_matches if m.get('plex_url')),
         'duration_shows': round(dur_shows,3),
         'duration_movies': round(dur_movies,3),
         'duration_total': round(timing['availability'],3),
-        'base_url': overseerr_url,
-        'sample_calls': _overseerr_debug_samples,
-        'errors': overseerr_errors[:10] if overseerr_errors else [],
-        'cache_size': len(_availability_cache)
+        'optimization': 'direct_plex_api',
+        'plex_configured': get_plex_client() is not None
     }
     # TMDb resolution debug summary
     if tmdb_resolution_events:
@@ -1850,18 +2154,18 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
         }
     debug['fuzzy_show_matches'] = show_matches
     debug['fuzzy_movie_matches'] = movie_matches
-    overseerr_available_shows = rec_shows
-    overseerr_available_movies = rec_movies
+    plex_available_shows = rec_shows
+    plex_available_movies = rec_movies
 
-    # Unavailable items (Overseerr not available or missing tmdb id)
+    # Unavailable items (not in Plex)
     def dedup(seq):
         seen = set(); out = []
         for x in seq:
             if x and x not in seen:
                 seen.add(x); out.append(x)
         return out
-    ai_shows_unavailable = dedup([m.get('ai_title') for m in show_matches if not m.get('overseerr_available')])
-    ai_movies_unavailable = dedup([m.get('ai_title') for m in movie_matches if not m.get('overseerr_available')])
+    ai_shows_unavailable = dedup([m.get('ai_title') for m in show_matches if not m.get('plex_available')])
+    ai_movies_unavailable = dedup([m.get('ai_title') for m in movie_matches if not m.get('plex_available')])
 
     # Step 8: Resolve posters for available recommendations (best-effort)
     t7 = time.time()
@@ -2405,10 +2709,10 @@ def index():
     global TAUTULLI_URL, TAUTULLI_API_KEY, GOOGLE_API_KEY, settings
     # Check for missing settings
     missing = []
-    if not g.TAUTULLI_URL:
-        missing.append('TAUTULLI_URL')
-    if not g.TAUTULLI_API_KEY:
-        missing.append('TAUTULLI_API_KEY')
+    if not g.PLEX_URL:
+        missing.append('PLEX_URL')
+    if not g.PLEX_TOKEN:
+        missing.append('PLEX_TOKEN')
     if not g.GOOGLE_API_KEY:
         missing.append('GOOGLE_API_KEY')
     if missing:
@@ -2715,6 +3019,21 @@ def settings_page():
         except Exception as e:
             return False, str(e)
 
+    def test_plex(url: str, token: str):
+        try:
+            if not url or not token:
+                return False, 'Plex URL and Token are required'
+            
+            # Test connection using same logic as PlexClient
+            headers = {'X-Plex-Token': token}
+            resp = requests.get(f"{url}/identity", headers=headers, timeout=10)
+            if resp.status_code == 200:
+                return True, None
+            else:
+                return False, f"HTTP {resp.status_code}: {resp.text[:100]}"
+        except Exception as e:
+            return False, str(e)
+
     if request.method == 'POST':
         new_settings = {
             'TAUTULLI_URL': request.form.get('TAUTULLI_URL', '').strip(),
@@ -2726,7 +3045,8 @@ def settings_page():
             'OVERSEERR_URL': request.form.get('OVERSEERR_URL', '').strip(),
             'OVERSEERR_API_KEY': request.form.get('OVERSEERR_API_KEY', '').strip(),
             'GEMINI_MODEL': request.form.get('GEMINI_MODEL', '').strip(),
-            # Removed TAUTULLI_INCLUDE_LIBRARIES, Plex URL/Token (deprecated)
+            'PLEX_URL': request.form.get('PLEX_URL', '').strip(),
+            'PLEX_TOKEN': request.form.get('PLEX_TOKEN', '').strip(),
         }
         # Collect chosen library IDs from multi-select checkboxes
     # Library inclusion filter removed
@@ -2745,18 +3065,27 @@ def settings_page():
             file.save(saved_upload_path)
             new_settings['TAUTULLI_DB_PATH'] = saved_upload_path
         errors = []
-        if not is_valid_url(new_settings['TAUTULLI_URL']):
-            errors.append('Tautulli URL must start with http:// or https://')
-        if not is_nonempty(new_settings['TAUTULLI_API_KEY']):
-            errors.append('Tautulli API Key is required')
+        if not is_valid_url(new_settings['PLEX_URL']):
+            errors.append('Plex URL must start with http:// or https://')
+        if not is_nonempty(new_settings['PLEX_TOKEN']):
+            errors.append('Plex Token is required')
         if not is_nonempty(new_settings['GOOGLE_API_KEY']):
             errors.append('Google Gemini API Key is required')
+        # Tautulli settings are now optional since we use Plex directly
+        if new_settings.get('TAUTULLI_URL') and not is_valid_url(new_settings['TAUTULLI_URL']):
+            errors.append('Tautulli URL must start with http:// or https://')
         # Overseerr settings are optional; validate URL format if provided
         if new_settings.get('OVERSEERR_URL'):
             if not is_valid_url(new_settings['OVERSEERR_URL']):
                 errors.append('Overseerr URL must start with http:// or https://')
-        # Live-validate Tautulli connectivity with provided values
+        # Live-validate Plex connectivity with provided values
         if not errors:
+            ok_p, err_p = test_plex(new_settings['PLEX_URL'], new_settings['PLEX_TOKEN'])
+            if not ok_p:
+                errors.append(f"Could not connect to Plex with provided URL/Token: {err_p}")
+        
+        # Tautulli connectivity test only if URL and API key provided
+        if not errors and new_settings.get('TAUTULLI_URL') and new_settings.get('TAUTULLI_API_KEY'):
             ok_t, err_t = test_tautulli(new_settings['TAUTULLI_URL'], new_settings['TAUTULLI_API_KEY'])
             if not ok_t:
                 errors.append(f"Could not connect to Tautulli with provided URL/API key: {err_t}")
@@ -2806,10 +3135,13 @@ def settings_page():
     feature_summary = []
     def _feat(name, enabled, desc):
         feature_summary.append({'name': name, 'enabled': bool(enabled), 'desc': desc})
+    _feat('Plex Server Connection', bool(settings.get('PLEX_URL') and settings.get('PLEX_TOKEN')), 'Direct Plex integration for accurate availability checking.')
+    _feat('Plex Library Scanning', bool(settings.get('PLEX_URL') and settings.get('PLEX_TOKEN')), 'Batch scanning of all Plex libraries for instant availability.')
     _feat('High-quality Posters & Metadata (TMDb)', bool(settings.get('TMDB_API_KEY')), 'Adds TMDb posters, overview, runtime & ratings.')
     _feat('Direct Overseerr Deep Links', bool(settings.get('OVERSEERR_URL')), 'Poster clicks open within Overseerr UI.')
     _feat('Overseerr Auth Features', bool(settings.get('OVERSEERR_URL') and settings.get('OVERSEERR_API_KEY')), 'Future advanced Overseerr features (requests/status).')
-    _feat('Full Watch History (Tautulli DB)', bool(settings.get('TAUTULLI_DB_PATH') and os.path.exists(settings.get('TAUTULLI_DB_PATH'))), 'Enables full watch history enrichment (availability now from Overseerr).')
+    _feat('Full Watch History (Tautulli DB)', bool(settings.get('TAUTULLI_DB_PATH') and os.path.exists(settings.get('TAUTULLI_DB_PATH'))), 'Enables full watch history enrichment.')
+    _feat('Enhanced Watch History (Tautulli API)', bool(settings.get('TAUTULLI_URL') and settings.get('TAUTULLI_API_KEY')), 'Access to user viewing patterns and preferences.')
     _feat('Daily Gemini Quotas Enforcement', bool(settings.get('GEMINI_DAILY_QUOTAS')), 'Limits model calls per day based on JSON map.')
     _feat('Preferred Gemini Model Override', bool(settings.get('GEMINI_MODEL')), 'Forces first-attempt model when generating recommendations.')
     # Removed Library Inclusion Filter & Plex Direct Library Source features
