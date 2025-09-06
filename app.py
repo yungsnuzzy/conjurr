@@ -2903,6 +2903,24 @@ def index():
         _add_status('Tautulli API Key', bool(getattr(g, 'TAUTULLI_API_KEY', '')))
         db_path = getattr(g, 'TAUTULLI_DB_PATH', '')
         _add_status('Tautulli DB (optional)', bool(db_path and os.path.exists(db_path)))
+        
+        # Plex connection status
+        plex_url = getattr(g, 'PLEX_URL', '')
+        plex_token = getattr(g, 'PLEX_TOKEN', '')
+        _add_status('Plex URL', _is_url(plex_url))
+        _add_status('Plex Token', bool(plex_token))
+        
+        # Test actual Plex connection if both URL and token are configured
+        plex_connection_ok = False
+        if plex_url and plex_token:
+            try:
+                plex_client = get_plex_client()
+                if plex_client:
+                    plex_connection_ok = plex_client.test_connection()
+            except Exception:
+                plex_connection_ok = False
+        _add_status('Plex Connection', plex_connection_ok if (plex_url and plex_token) else True)
+        
         _add_status('Google Gemini API Key', bool(getattr(g, 'GOOGLE_API_KEY', '')))
         _add_status('TMDb API Key', bool(getattr(g, 'TMDB_API_KEY', '')))
         overseerr_url = getattr(g, 'OVERSEERR_URL', '')
