@@ -22,15 +22,33 @@ Conjurr analyzes Plex watch history via Tautulli, resolves TMDb IDs, and uses Go
 - Model label in header (shows which Gemini model served the response)
 
 ## Setup
+### Option 1: Local Python Installation
 1. Install dependencies:
 	- Use `requirements.txt` with your Python 3.11+ environment.
-2. Start the app and open the UI at `/` (defaults to http://127.0.0.1:2665).(CONJ)
+2. Start the app and open the UI at `/` (defaults to http://127.0.0.1:2665).
 3. Visit `/settings` and enter:
 	- Tautulli URL and API key
 	- Google Gemini API key
 	- Optional: Tautulli DB Path (for faster local reads)
 	- Optional: TMDb API key (to enable posters)
 	- Optional: Gemini daily quotas JSON (e.g. {"gemini-2.0-flash-001": 200})
+
+
+### Option 2: Docker
+1. **Set up environment variables:**
+   ```bash
+   cp env.example .env
+   # Edit .env with your actual API keys and configuration
+   ```
+
+2. **Run with Docker Compose:**
+   ```bash
+   docker-compose up
+   ```
+
+3. **Access the application:**
+   - Open http://localhost:2665 in your browser
+   - The app will be available at the root path
 
 Environment/.env keys recognized:
 - TAUTULLI_URL

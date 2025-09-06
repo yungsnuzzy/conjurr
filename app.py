@@ -3167,4 +3167,11 @@ def settings_page():
     return render_template('settings.html', settings=settings, missing=missing, message=message, message_type=message_type, redirect_main=False, feature_summary=feature_summary)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=2665)
+    # Get port from environment variable or default to 2665
+    port = int(os.environ.get('PORT', 2665))
+    # Get host from environment variable or default to 0.0.0.0 for containerization
+    host = os.environ.get('HOST', '0.0.0.0')
+    # Get debug mode from environment variable
+    debug = os.environ.get('FLASK_ENV') == 'development'
+    
+    app.run(debug=debug, host=host, port=port)

@@ -1,0 +1,31 @@
+services:
+  conjurr:
+    image: ghcr.io/${GITHUB_REPOSITORY:-username/conjurr}:latest
+    ports:
+      - "2665:2665"
+    environment:
+      - FLASK_ENV=production
+      - TAUTULLI_URL=${TAUTULLI_URL}
+      - TAUTULLI_API_KEY=${TAUTULLI_API_KEY}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - TAUTULLI_DB_PATH=${TAUTULLI_DB_PATH}
+      - TMDB_API_KEY=${TMDB_API_KEY}
+      - GEMINI_DAILY_QUOTAS=${GEMINI_DAILY_QUOTAS}
+      - USER_MODE=${USER_MODE}
+      - OVERSEERR_URL=${OVERSEERR_URL}
+      - OVERSEERR_API_KEY=${OVERSEERR_API_KEY}
+      - PGID=1001
+      - PUID=1001
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:2665/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Optional: Add logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
