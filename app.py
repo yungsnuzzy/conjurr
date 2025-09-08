@@ -27,6 +27,9 @@ from datetime import datetime, date, time as datetime_time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import sys
 
+# App version (displayed in UI)
+VERSION = "v3.7.5 beta (The 'cash money' update)"
+
 # PyInstaller compatibility
 def get_base_path():
     """Get the base path for files, whether running as script or executable."""
@@ -43,9 +46,6 @@ template_dir = os.path.join(base_path, 'templates')
 static_dir = os.path.join(base_path, 'static')
 
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
-
-# App version (displayed in UI)
-VERSION = "v3.7.5 beta (The 'cash money' update)"
 
 # User Mode (1 or 0): when enabled, hide settings/debug/library status and require Plex email/username prompt
 USER_MODE = 0
