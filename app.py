@@ -1,7 +1,7 @@
 from rapidfuzz import fuzz, process
 from flask import Flask, jsonify, render_template, request, send_from_directory, g, redirect, url_for, abort
 import requests
-import os
+import os, shutil
 from pathlib import Path
 from dotenv import load_dotenv, set_key, dotenv_values, find_dotenv
 import configparser
@@ -43,7 +43,7 @@ static_dir = os.path.join(base_path, 'static')
 app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 
 # App version (displayed in UI)
-VERSION = "v3.7 beta (The 'matchymatchy' update)"
+VERSION = "v3.7.2 beta (The 'matchymatchy' update)"
 
 # User Mode (1 or 0): when enabled, hide settings/debug/library status and require Plex email/username prompt
 USER_MODE = 0
@@ -62,7 +62,10 @@ MOOD_LABEL_MAP = {
 
 # Load .env file (used in dev; for frozen EXE we'll use settings.ini)
 ROOT = Path(__file__).resolve().parent
-ENV_PATH = find_dotenv(usecwd=True) or str(ROOT / ".env")
+if os.path.exists(ROOT / ".env"):
+    os.makedirs(ROOT / "env", exist_ok = True)
+    shutil.move(ROOT / ".env", ROOT / "env" / ".env")
+ENV_PATH = find_dotenv(usecwd=True) or str(ROOT / "env" / ".env")
 load_dotenv(ENV_PATH)
 
 # Runtime path helpers
@@ -3275,4 +3278,4 @@ def settings_page():
     return render_template('settings.html', settings=settings, missing=missing, message=message, message_type=message_type, redirect_main=False, feature_summary=feature_summary)
 
 if __name__ == '__main__':
-    app.run(debug=True, port=2665)
+    app.run(host="0.0.0.0", port=2665, debug=True)
