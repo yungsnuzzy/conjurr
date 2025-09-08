@@ -219,8 +219,8 @@
         <div>
             <span>Conjurr knows all</span>
             {% if version %}<span class="version">{{ version }}</span>{% endif %}
-            {% if recs and recs.debug and recs.debug.gemini_model_used %}
-                <span class="version" style="font-size:0.9em;color:#cfc088;">Model: {{ recs.debug.gemini_model_used }}</span>
+            {% if recs and recs.debug and recs.debug.ai_model_used %}
+                <span class="version" style="font-size:0.9em;color:#cfc088;">Model: {{ recs.debug.ai_model_used }}</span>
             {% endif %}
         </div>
     </div>
@@ -230,15 +230,12 @@
         <div style="font-weight:bold;margin-bottom:6px;color:#ffe066;">Configuration Status</div>
         <ul style="list-style:none;margin:0;padding:0;font-size:0.85em;line-height:1.5;max-width:260px;">
             {% for it in user_config_status %}
-            <li class="config-status-item{% if 'Library Filter:' in it.name %} config-status-libs{% endif %}" style="display:flex;align-items:flex-start;gap:6px;">
+            <li style="display:flex;align-items:flex-start;gap:6px;">
                 <span style="width:18px;text-align:center;">{% if it.ok %}✅{% else %}❌{% endif %}</span>
                 <span {% if not it.ok %}style="color:#ff8888;"{% endif %}>{{ it.name }}</span>
             </li>
             {% endfor %}
         </ul>
-        <style>
-            .config-status-item.config-status-libs { margin-top:4px; padding-top:4px; border-top:1px solid #333; }
-        </style>
     </div>
     {% endif %}
     <form id="main-form" method="post" style="text-align:center; margin-bottom:20px;">
@@ -292,6 +289,30 @@
                             {% for k,v in moods|dictsort(by='value') %}
                                 <option value="{{ k }}" {% if mood_selected==k %}selected{% endif %}>{{ v }}</option>
                             {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.9em;display:block;margin-bottom:4px;" for="model">AI Model</label>
+                        <select name="model" id="model" style="padding:6px 8px;min-width:160px;">
+                            <option value="">-- Default --</option>
+                            {% if ai_provider == 'gemini' %}
+                                <option value="gemini-2.5-flash-lite" {% if model_selected=='gemini-2.5-flash-lite' %}selected{% endif %}>Gemini 2.5 Flash Lite</option>
+                                <option value="gemini-2.0-flash-001" {% if model_selected=='gemini-2.0-flash-001' %}selected{% endif %}>Gemini 2.0 Flash</option>
+                                <option value="gemini-1.5-flash" {% if model_selected=='gemini-1.5-flash' %}selected{% endif %}>Gemini 1.5 Flash</option>
+                                <option value="gemini-1.5-pro" {% if model_selected=='gemini-1.5-pro' %}selected{% endif %}>Gemini 1.5 Pro</option>
+                                <option value="gemini-pro" {% if model_selected=='gemini-pro' %}selected{% endif %}>Gemini Pro</option>
+                            {% elif ai_provider == 'mistral' %}
+                                <option value="mistral-small" {% if model_selected=='mistral-small' %}selected{% endif %}>Mistral Small (Free)</option>
+                                <option value="mistral-tiny" {% if model_selected=='mistral-tiny' %}selected{% endif %}>Mistral Tiny (Free)</option>
+                                <option value="mistral-medium" {% if model_selected=='mistral-medium' %}selected{% endif %}>Mistral Medium</option>
+                                <option value="mistral-large-latest" {% if model_selected=='mistral-large-latest' %}selected{% endif %}>Mistral Large</option>
+                            {% elif ai_provider == 'openrouter' %}
+                                <option value="anthropic/claude-3-haiku" {% if model_selected=='anthropic/claude-3-haiku' %}selected{% endif %}>Claude 3 Haiku</option>
+                                <option value="anthropic/claude-3-sonnet" {% if model_selected=='anthropic/claude-3-sonnet' %}selected{% endif %}>Claude 3 Sonnet</option>
+                                <option value="anthropic/claude-3-opus" {% if model_selected=='anthropic/claude-3-opus' %}selected{% endif %}>Claude 3 Opus</option>
+                                <option value="openai/gpt-4o-mini" {% if model_selected=='openai/gpt-4o-mini' %}selected{% endif %}>GPT-4o Mini</option>
+                                <option value="openai/gpt-4o" {% if model_selected=='openai/gpt-4o' %}selected{% endif %}>GPT-4o</option>
+                            {% endif %}
                         </select>
                     </div>
                 </div>
@@ -355,6 +376,30 @@
                             {% for k,v in moods|dictsort(by='value') %}
                                 <option value="{{ k }}" {% if mood_selected==k %}selected{% endif %}>{{ v }}</option>
                             {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.95em;display:block;margin-bottom:4px;" for="model">AI Model</label>
+                        <select name="model" id="model" style="padding:6px 8px;min-width:160px;">
+                            <option value="">-- Default --</option>
+                            {% if ai_provider == 'gemini' %}
+                                <option value="gemini-2.5-flash-lite" {% if model_selected=='gemini-2.5-flash-lite' %}selected{% endif %}>Gemini 2.5 Flash Lite</option>
+                                <option value="gemini-2.0-flash-001" {% if model_selected=='gemini-2.0-flash-001' %}selected{% endif %}>Gemini 2.0 Flash</option>
+                                <option value="gemini-1.5-flash" {% if model_selected=='gemini-1.5-flash' %}selected{% endif %}>Gemini 1.5 Flash</option>
+                                <option value="gemini-1.5-pro" {% if model_selected=='gemini-1.5-pro' %}selected{% endif %}>Gemini 1.5 Pro</option>
+                                <option value="gemini-pro" {% if model_selected=='gemini-pro' %}selected{% endif %}>Gemini Pro</option>
+                            {% elif ai_provider == 'mistral' %}
+                                <option value="mistral-small" {% if model_selected=='mistral-small' %}selected{% endif %}>Mistral Small (Free)</option>
+                                <option value="mistral-tiny" {% if model_selected=='mistral-tiny' %}selected{% endif %}>Mistral Tiny (Free)</option>
+                                <option value="mistral-medium" {% if model_selected=='mistral-medium' %}selected{% endif %}>Mistral Medium</option>
+                                <option value="mistral-large-latest" {% if model_selected=='mistral-large-latest' %}selected{% endif %}>Mistral Large</option>
+                            {% elif ai_provider == 'openrouter' %}
+                                <option value="anthropic/claude-3-haiku" {% if model_selected=='anthropic/claude-3-haiku' %}selected{% endif %}>Claude 3 Haiku</option>
+                                <option value="anthropic/claude-3-sonnet" {% if model_selected=='anthropic/claude-3-sonnet' %}selected{% endif %}>Claude 3 Sonnet</option>
+                                <option value="anthropic/claude-3-opus" {% if model_selected=='anthropic/claude-3-opus' %}selected{% endif %}>Claude 3 Opus</option>
+                                <option value="openai/gpt-4o-mini" {% if model_selected=='openai/gpt-4o-mini' %}selected{% endif %}>GPT-4o Mini</option>
+                                <option value="openai/gpt-4o" {% if model_selected=='openai/gpt-4o' %}selected{% endif %}>GPT-4o</option>
+                            {% endif %}
                         </select>
                     </div>
                 </div>
@@ -674,12 +719,13 @@
     <div id="timing-section" style="width:60%;margin:20px auto;">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:16px;">
             <div style="margin:10px 0;min-width:220px;">
-                <b>Gemini:</b>
+                <b>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }}:</b>
                 <div>
-                    <div>SDK: {{ recs.debug.genai_sdk if recs and recs.debug else 'N/A' }}</div>
-                    <div>Model: {{ recs.debug.gemini_model_used if recs and recs.debug and recs.debug.gemini_model_used else 'N/A' }}</div>
-                    {% if recs and recs.debug and recs.debug.gemini_usage %}
-                        {% set u = recs.debug.gemini_usage %}
+                    <div>Provider: {{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'N/A' }}</div>
+                    <div>Selected Model: {{ recs.debug.ai_model_selected if recs and recs.debug and recs.debug.ai_model_selected else 'N/A' }}</div>
+                    <div>Used Model: {{ recs.debug.ai_model_used if recs and recs.debug and recs.debug.ai_model_used else 'N/A' }}</div>
+                    {% if recs and recs.debug and recs.debug.ai_usage %}
+                        {% set u = recs.debug.ai_usage %}
                         <div style="font-size:0.95em;color:#bbb;">
                             prompt tokens: {{ u.prompt_token_count if u.prompt_token_count is not none else 'N/A' }},
                             candidates tokens: {{ u.candidates_token_count if u.candidates_token_count is not none else 'N/A' }},
@@ -688,12 +734,12 @@
                     {% else %}
                         <div style="font-size:0.95em;color:#bbb;">usage: N/A</div>
                     {% endif %}
-                    {% if recs and recs.debug and recs.debug.gemini_usage_today %}
-                        {% set d = recs.debug.gemini_usage_today %}
+                    {% if recs and recs.debug and recs.debug.ai_usage_today %}
+                        {% set d = recs.debug.ai_usage_today %}
                         <div style="font-size:0.95em;color:#bbb;">today: {{ d.calls }} calls, {{ d.total_tokens }} tokens</div>
                     {% endif %}
-                    {% if recs and recs.debug and recs.debug.gemini_daily_quota %}
-                        <div style="font-size:0.95em;color:#bbb;">quota: {{ recs.debug.gemini_daily_quota }} calls; remaining: {{ recs.debug.gemini_daily_remaining }}</div>
+                    {% if recs and recs.debug and recs.debug.ai_daily_quota %}
+                        <div style="font-size:0.95em;color:#bbb;">quota: {{ recs.debug.ai_daily_quota }} calls; remaining: {{ recs.debug.ai_daily_remaining }}</div>
                     {% endif %}
                 </div>
             </div>
@@ -704,7 +750,7 @@
                     <li>Top watched calc: {{ recs.debug.timing.top_watched|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.top_watched is not none else 'N/A' }}</li>
                     <li>Library fetch: {% if recs and recs.debug and recs.debug.timing and recs.debug.timing.library_fetch is not none and recs.debug.timing.library_fetch is number %}{{ recs.debug.timing.library_fetch|round(2) }}{% elif recs and recs.debug and recs.debug.timing and recs.debug.timing.library_fetch is not none %}{{ recs.debug.timing.library_fetch }}{% else %}N/A{% endif %}</li>
                     <li>Unwatched filter: (deprecated)</li>
-                    <li>Gemini call: {% if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none and recs.debug.timing.gemini is number %}{{ recs.debug.timing.gemini|round(2) }}{% else %}{{ recs.debug.timing.gemini if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none else 'N/A' }}{% endif %}</li>
+                    <li>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} call: {% if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none and recs.debug.timing.gemini is number %}{{ recs.debug.timing.gemini|round(2) }}{% else %}{{ recs.debug.timing.gemini if recs and recs.debug and recs.debug.timing and recs.debug.timing.gemini is not none else 'N/A' }}{% endif %}</li>
                     <li>AI parse: {{ recs.debug.timing.ai_parse|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.ai_parse is not none else 'N/A' }}</li>
                     <li>Fuzzy match: {{ recs.debug.timing.fuzzy_match|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.fuzzy_match is not none else 'N/A' }}</li>
                     <li>Posters fetch: {{ recs.debug.timing.posters|default('N/A')|round(2) if recs and recs.debug and recs.debug.timing and recs.debug.timing.posters is not none else 'N/A' }}</li>
@@ -769,10 +815,10 @@
             <div>All shows in library: {{ recs.debug.all_shows_count }}</div>
             <div>All movies in library: {{ recs.debug.all_movies_count }}</div>
             <div>Watched set count: {{ recs.debug.watched_set_count }}</div>
-            <div>Gemini AI Shows: {{ recs.debug.gemini_ai_shows|join(', ') }}</div>
-            <div>Gemini AI Movies: {{ recs.debug.gemini_ai_movies|join(', ') }}</div>
-            <div>Gemini AI Shows Available in Library: {{ recs.debug.gemini_ai_shows_available|join(', ') }}</div>
-            <div>Gemini AI Movies Available in Library: {{ recs.debug.gemini_ai_movies_available|join(', ') }}</div>
+            <div>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} AI Shows: {{ recs.debug.ai_shows|join(', ') }}</div>
+            <div>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} AI Movies: {{ recs.debug.ai_movies|join(', ') }}</div>
+            <div>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} AI Shows Available in Library: {{ recs.debug.ai_shows_available|join(', ') }}</div>
+            <div>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} AI Movies Available in Library: {{ recs.debug.ai_movies_available|join(', ') }}</div>
             <div>Show section IDs: {{ recs.debug.show_section_ids }}</div>
             <div>Movie section IDs: {{ recs.debug.movie_section_ids }}</div>
             <div>Show items found: {{ recs.debug.show_items_found }}</div>
@@ -785,14 +831,14 @@
                 <div style="color:red;">get_library_media_info errors: {{ recs.debug.get_library_media_info_errors }}</div>
             {% endif %}
             <div style="margin-top:10px;">
-                <b>Gemini (Google AI Studio) Debug:</b>
-                <div><b>Prompt:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.gemini_prompt }}</pre></div>
-                <div><b>Raw Response:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.gemini_raw_response }}</pre></div>
-                <div><b>Parsed JSON:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.gemini_parsed_json }}</pre></div>
+                <b>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} Debug:</b>
+                <div><b>Prompt:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.ai_prompt }}</pre></div>
+                <div><b>Raw Response:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.ai_raw_response }}</pre></div>
+                <div><b>Parsed JSON:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.ai_parsed_json }}</pre></div>
                 <div><b>Recent shows (last 10):</b> {{ recs.debug.recent_shows|join(', ') }}</div>
                 <div><b>Recent movies (last 10):</b> {{ recs.debug.recent_movies|join(', ') }}</div>
-                {% if recs.debug.gemini_error %}
-                    <div style="color:red;">Gemini error: {{ recs.debug.gemini_error }}</div>
+                {% if recs.debug.ai_error %}
+                    <div style="color:red;">{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} error: {{ recs.debug.ai_error }}</div>
                 {% endif %}
             </div>
             {% if recs.debug.overseerr_availability %}

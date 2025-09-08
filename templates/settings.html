@@ -7,24 +7,106 @@
         body { background:#101010; color:#f5dc7a; font-family: system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; line-height:1.35; }
         a { color:#ffd84d; }
         h2,h3 { margin:0 0 8px; font-weight:600; }
-        h3 { margin-top:32px; font-size:1.05rem; letter-spacing:.5px; text-transform:uppercase; color:#ffc94d; }
+        h3 { margin-top: 40px; margin-bottom: 16px; font-size: 1.1rem; letter-spacing: 0.5px; text-transform: uppercase; color: #ffc94d; border-bottom: 1px solid #333; padding-bottom: 8px; position: relative; }
+        h3:first-of-type { margin-top: 0; }
+        h3::before { content: ''; position: absolute; bottom: -1px; left: 0; width: 60px; height: 2px; background: linear-gradient(90deg, #ffc947, transparent); }
         .settings-container { max-width: 820px; margin:56px auto 80px; background:#1d1d1d; padding:42px 46px 54px; border-radius:18px; box-shadow:0 8px 28px -6px #000, 0 0 0 1px #2c2c2c inset; position:relative; }
         .grid { display:grid; gap:26px 34px; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); margin-top:8px; }
         .field { position:relative; }
         label { display:flex; align-items:center; font-weight:600; font-size:.78rem; letter-spacing:.1em; text-transform:uppercase; opacity:.9; margin-bottom:6px; }
         label span.required { color:#ff6363; margin-left:6px; font-weight:700; }
-        input[type=text], input[type=password] { width:100%; padding:10px 12px 9px; background:#141414; color:#ffe89c; border:1px solid #353535; border-radius:8px; font-size:.92rem; font-family:inherit; transition:.18s border, .18s background; }
-        input[type=text]:focus, input[type=password]:focus { outline:none; border-color:#ffc947; background:#181818; box-shadow:0 0 0 1px #ffc947; }
+        input[type=text], input[type=password] { width: 100%; padding: 12px 14px 11px; background: #141414; color: #ffe89c; border: 1px solid #353535; border-radius: 8px; font-size: 0.95rem; font-family: inherit; transition: all 0.2s ease; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); }
+        input[type=text]:focus, input[type=password]:focus { outline: none; border-color: #ffc947; background: #181818; box-shadow: 0 0 0 3px rgba(255, 201, 71, 0.1), inset 0 1px 2px rgba(0,0,0,0.1); }
         input[disabled] { opacity:.55; cursor:not-allowed; }
         .hint { font-size:.7rem; margin-top:6px; color:#d0c396; letter-spacing:.03em; line-height:1.25; }
         .hint code { background:#252525; padding:1px 5px 2px; border-radius:4px; font-size:.68rem; color:#ffecb3; }
         .section-note { font-size:.72rem; margin-top:-4px; color:#b5a978; }
-        .msg { margin-top:4px; font-size:.78rem; }
-        .msg.success { color:#67ff9d; }
-        .msg.error { color:#ff6363; }
-        button { margin-top:34px; background:linear-gradient(90deg,#ffd54f,#ffc107); color:#1a1500; border:none; padding:14px 30px; border-radius:10px; font-weight:600; cursor:pointer; font-size:.9rem; letter-spacing:.05em; box-shadow:0 3px 10px -2px #0009, 0 0 0 1px #dca72a inset; transition:.2s transform,.25s box-shadow; }
-        button:hover { box-shadow:0 5px 18px -4px #000,0 0 0 1px #ffce3b inset; }
-        button:active { transform:translateY(1px); }
+        .msg { 
+            margin: 16px 0; 
+            padding: 16px 20px; 
+            border-radius: 12px; 
+            font-size: 1rem; 
+            font-weight: 600;
+            text-align: center;
+            border: 2px solid transparent;
+            position: relative;
+            animation: slideIn 0.3s ease-out;
+        }
+        .msg.success { 
+            color: #1a5f2a; 
+            background: linear-gradient(135deg, #67ff9d, #4ade80);
+            border-color: #22c55e;
+            box-shadow: 0 4px 20px rgba(34, 197, 94, 0.3);
+        }
+        .msg.error { 
+            color: #7f1d1d; 
+            background: linear-gradient(135deg, #ff6363, #ef4444);
+            border-color: #dc2626;
+            box-shadow: 0 4px 20px rgba(220, 38, 38, 0.3);
+        }
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideOut {
+            from { opacity: 1; transform: translateY(0); }
+            to { opacity: 0; transform: translateY(-10px); }
+        }
+        
+        /* Loading overlay for save process */
+        .save-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.85);
+            backdrop-filter: blur(4px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+        }
+        .save-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+        .save-overlay-content {
+            background: #1d1d1d;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            border: 2px solid #ffc947;
+            box-shadow: 0 8px 32px rgba(255, 201, 71, 0.3);
+            max-width: 400px;
+            width: 90%;
+        }
+        .save-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid #333;
+            border-top: 4px solid #ffc947;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .save-overlay h3 {
+            color: #ffc947;
+            margin: 0 0 10px 0;
+            font-size: 1.4rem;
+        }
+        .save-overlay p {
+            color: #f0eaea;
+            margin: 0;
+            font-size: 1rem;
+        }
+        button { margin-top: 40px; background: linear-gradient(135deg, #ffd54f 0%, #ffc107 100%); color: #1a1500; border: none; padding: 16px 32px; border-radius: 10px; font-weight: 600; cursor: pointer; font-size: 0.95rem; letter-spacing: 0.05em; box-shadow: 0 4px 12px -2px rgba(255, 213, 79, 0.3), 0 0 0 1px rgba(220, 167, 42, 0.5) inset; transition: all 0.2s ease; position: relative; overflow: hidden; }
+        button:hover { box-shadow: 0 6px 20px -4px rgba(255, 213, 79, 0.4), 0 0 0 1px rgba(255, 206, 59, 0.7) inset; transform: translateY(-1px); }
+        button:active { transform: translateY(0); }
         .back-link { text-decoration:none; display:inline-flex; align-items:center; gap:6px; margin-top:36px; font-size:.78rem; text-transform:uppercase; letter-spacing:.15em; opacity:.85; }
         .back-link:hover { opacity:1; }
         .pill-row { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
@@ -40,9 +122,29 @@
         .group-title { margin-top:34px; font-size:.74rem; font-weight:700; letter-spacing:.18em; text-transform:uppercase; color:#ffdd71; display:flex; align-items:center; gap:8px; }
         .divider { height:1px; background:linear-gradient(90deg,transparent,#444,transparent); margin:34px 0 6px; border:none; }
         .inline-badge { background:#303030; padding:3px 7px 4px; border-radius:6px; font-size:.55rem; letter-spacing:.08em; text-transform:uppercase; color:#fbd777; }
-        .two-col { columns:2 320px; column-gap:34px; }
-        @media (max-width:860px){ .settings-container{padding:38px 32px 50px;} table.features td:first-child{width:140px;} }
-        @media (max-width:620px){ .two-col{columns:1;} }
+        .library-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-top: 12px; }
+        .library-option { display: flex; align-items: center; gap: 10px; background: #141414; padding: 12px 16px; border-radius: 8px; border: 1px solid #353535; cursor: pointer; transition: all 0.2s ease; position: relative; }
+        .library-option:hover { border-color: #ffc947; background: #181818; }
+        .library-option input[type="checkbox"] { width: 16px; height: 16px; accent-color: #ffc947; margin: 0; }
+        .library-name { font-size: 0.85rem; color: #ffe89c; font-weight: 500; flex: 1; }
+        .library-option input[type="checkbox"]:checked + .library-name { color: #ffc947; font-weight: 600; }
+        .library-option input[type="checkbox"]:checked ~ .library-type { background: #ffc947; color: #1a1500; }
+        .library-empty { background: #141414; padding: 24px; border-radius: 8px; border: 1px solid #353535; text-align: center; margin-top: 12px; }
+        .library-empty-icon { font-size: 2rem; margin-bottom: 8px; opacity: 0.7; }
+        .library-empty-text { color: #d0c396; font-size: 0.8rem; line-height: 1.4; }
+        @media (max-width: 860px) {
+            .settings-container { padding: 32px 24px 40px; }
+            .library-grid { grid-template-columns: 1fr; }
+            .library-option { padding: 10px 14px; }
+            table.features td:first-child { width: 120px; }
+            h3 { font-size: 1rem; }
+        }
+        @media (max-width: 620px) {
+            .grid { grid-template-columns: 1fr; gap: 20px; }
+            .settings-container { margin: 20px auto 40px; padding: 24px 20px 32px; }
+            h2 { font-size: 1.6rem; }
+            .library-name { font-size: 0.8rem; }
+        }
     </style>
 </head>
 <body>
@@ -55,6 +157,9 @@
             </div>
         {% endif %}
     <form method="post" id="settings-form" autocomplete="off" enctype="multipart/form-data">
+        
+        <button type="submit" id="save-btn-top" style="margin-bottom: 20px;">Save Settings</button>
+
         <h3>Plex Server Connection</h3>
         <div class="grid">
             <div class="field">
@@ -69,20 +174,42 @@
             </div>
         </div>
 
-        <h3>Core Tautulli Connection <span class="inline-badge">Optional</span></h3>
+        <h3>Library Selection <span class="inline-badge">Optional</span></h3>
+        <div class="field" style="margin-top: 8px;">
+            <div class="hint" style="margin-bottom: 12px;">Select which Plex libraries to consider when generating recommendations. Leave empty to include all libraries.</div>
+            {% if libraries %}
+            <div class="library-grid">
+                {% for lib in libraries %}
+                <label class="library-option">
+                    <input type="checkbox" name="SELECTED_LIBRARIES" value="{{ lib.key }}"
+                           {% if lib.key in selected_libraries %}checked{% endif %}>
+                    <span class="library-name">{{ lib.title }}</span>
+                    <span class="library-type">{{ lib.type }}</span>
+                </label>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="library-empty">
+                <div class="library-empty-icon">📚</div>
+                <div class="library-empty-text">No libraries found. Please configure Plex URL and Token above, then save settings to load available libraries.</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <h3>Watch History Source <span class="inline-badge">Optional</span></h3>
         <div class="grid">
             <div class="field">
-                <label for="TAUTULLI_URL">Tautulli URL <span class="inline-badge">Optional</span></label>
+                <label for="TAUTULLI_URL">Tautulli URL</label>
                 <input type="text" id="TAUTULLI_URL" name="TAUTULLI_URL" value="{{ settings.TAUTULLI_URL }}">
                 <div class="hint">Base URL to your Tautulli instance (no trailing slash). Example: <code>http://localhost:8181</code></div>
             </div>
             <div class="field">
-                <label for="TAUTULLI_API_KEY">Tautulli API Key <span class="inline-badge">Optional</span></label>
+                <label for="TAUTULLI_API_KEY">Tautulli API Key</label>
                 <input type="password" id="TAUTULLI_API_KEY" name="TAUTULLI_API_KEY" value="{{ settings.TAUTULLI_API_KEY }}">
                 <div class="hint">Generate in Tautulli: Settings → Web Interface → API.</div>
             </div>
             <div class="field" style="grid-column:1 / -1;">
-                <label for="TAUTULLI_DB_PATH">Tautulli DB Path <span class="inline-badge">Optional</span></label>
+                <label for="TAUTULLI_DB_PATH">Tautulli Database Path</label>
                 <input type="text" id="TAUTULLI_DB_PATH" name="TAUTULLI_DB_PATH" value="{{ settings.TAUTULLI_DB_PATH }}" placeholder="e.g. %LOCALAPPDATA%/Tautulli/Tautulli.db">
                 <div class="hint">Enables full watch history + faster library availability. Auto-detected on Windows if left blank.</div>
                 <input style="margin-top:10px" type="file" id="TAUTULLI_DB_FILE" name="TAUTULLI_DB_FILE" accept=".db,.sqlite,.sqlite3">
@@ -90,46 +217,111 @@
             </div>
         </div>
 
-        <h3>AI / Gemini</h3>
+        <h3>AI Configuration</h3>
         <div class="grid">
             <div class="field">
-                <label for="GOOGLE_API_KEY">Gemini API Key {% if 'GOOGLE_API_KEY' in missing %}<span class="required">REQ</span>{% endif %}</label>
-                <input type="password" id="GOOGLE_API_KEY" name="GOOGLE_API_KEY" value="{{ settings.GOOGLE_API_KEY }}" required>
-                <div class="hint">Used for per-user personalized recommendations.</div>
+                <label for="AI_PROVIDER">AI Provider</label>
+                <select id="AI_PROVIDER" name="AI_PROVIDER" style="width:100%; padding:12px 14px 11px; background:#141414; color:#ffe89c; border:1px solid #353535; border-radius:8px; font-size:0.95rem; font-family:inherit; transition:all 0.2s ease;">
+                    <option value="gemini" {% if settings.AI_PROVIDER == 'gemini' or not settings.AI_PROVIDER %}selected{% endif %}>Google Gemini</option>
+                    <option value="mistral" {% if settings.AI_PROVIDER == 'mistral' %}selected{% endif %}>Mistral AI</option>
+                    <option value="openrouter" {% if settings.AI_PROVIDER == 'openrouter' %}selected{% endif %}>OpenRouter</option>
+                </select>
+                <div class="hint">Choose your preferred AI provider for generating recommendations.</div>
             </div>
+            
             <div class="field">
-                <label for="GEMINI_MODEL">Preferred Model <span class="inline-badge">Optional</span></label>
-                <input type="text" id="GEMINI_MODEL" name="GEMINI_MODEL" value="{{ settings.GEMINI_MODEL }}" placeholder="gemini-2.5-flash-lite">
-                <div class="hint">Overrides default model order. Examples: <code>gemini-2.5-flash-lite</code>, <code>gemini-2.5-flash</code>.</div>
+                <label for="AI_MODEL">AI Model</label>
+                <select id="AI_MODEL" name="AI_MODEL" style="width:100%; padding:12px 14px 11px; background:#141414; color:#ffe89c; border:1px solid #353535; border-radius:8px; font-size:0.95rem; font-family:inherit; transition:all 0.2s ease;">
+                    <option value="" {% if not settings.AI_MODEL %}selected{% endif %}>Auto-select (Recommended)</option>
+                    <!-- Gemini Models -->
+                    <optgroup label="Google Gemini" id="gemini-models" {% if settings.AI_PROVIDER != 'gemini' and settings.AI_PROVIDER %}style="display:none;"{% endif %}>
+                        <option value="gemini-2.5-flash-lite" {% if settings.AI_MODEL == 'gemini-2.5-flash-lite' %}selected{% endif %}>Gemini 2.5 Flash Lite</option>
+                        <option value="gemini-2.5-flash" {% if settings.AI_MODEL == 'gemini-2.5-flash' %}selected{% endif %}>Gemini 2.5 Flash</option>
+                        <option value="gemini-2.5-pro" {% if settings.AI_MODEL == 'gemini-2.5-pro' %}selected{% endif %}>Gemini 2.5 Pro</option>
+                        <option value="gemini-1.5-flash" {% if settings.AI_MODEL == 'gemini-1.5-flash' %}selected{% endif %}>Gemini 1.5 Flash</option>
+                        <option value="gemini-1.5-pro" {% if settings.AI_MODEL == 'gemini-1.5-pro' %}selected{% endif %}>Gemini 1.5 Pro</option>
+                        <option value="gemini-pro" {% if settings.AI_MODEL == 'gemini-pro' %}selected{% endif %}>Gemini Pro</option>
+                    </optgroup>
+                    <!-- Mistral Models -->
+                    <optgroup label="Mistral AI (Free)" id="mistral-models" {% if settings.AI_PROVIDER != 'mistral' %}style="display:none;"{% endif %}>
+                        <option value="mistral-small" {% if settings.AI_MODEL == 'mistral-small' %}selected{% endif %}>Mistral Small (Free)</option>
+                        <option value="mistral-tiny" {% if settings.AI_MODEL == 'mistral-tiny' %}selected{% endif %}>Mistral Tiny (Free)</option>
+                    </optgroup>
+                    <optgroup label="Mistral AI (Paid)" id="mistral-paid-models" {% if settings.AI_PROVIDER != 'mistral' %}style="display:none;"{% endif %}>
+                        <option value="mistral-medium" {% if settings.AI_MODEL == 'mistral-medium' %}selected{% endif %}>Mistral Medium</option>
+                        <option value="mistral-large-latest" {% if settings.AI_MODEL == 'mistral-large-latest' %}selected{% endif %}>Mistral Large (Latest)</option>
+                    </optgroup>
+                    <!-- OpenRouter Models -->
+                    <optgroup label="OpenRouter" id="openrouter-models" {% if settings.AI_PROVIDER != 'openrouter' %}style="display:none;"{% endif %}>
+                        <option value="anthropic/claude-3-haiku" {% if settings.AI_MODEL == 'anthropic/claude-3-haiku' %}selected{% endif %}>Claude 3 Haiku</option>
+                        <option value="anthropic/claude-3-sonnet" {% if settings.AI_MODEL == 'anthropic/claude-3-sonnet' %}selected{% endif %}>Claude 3 Sonnet</option>
+                        <option value="anthropic/claude-3-opus" {% if settings.AI_MODEL == 'anthropic/claude-3-opus' %}selected{% endif %}>Claude 3 Opus</option>
+                        <option value="openai/gpt-4o-mini" {% if settings.AI_MODEL == 'openai/gpt-4o-mini' %}selected{% endif %}>GPT-4o Mini</option>
+                        <option value="openai/gpt-4o" {% if settings.AI_MODEL == 'openai/gpt-4o' %}selected{% endif %}>GPT-4o</option>
+                        <option value="openai/gpt-4-turbo" {% if settings.AI_MODEL == 'openai/gpt-4-turbo' %}selected{% endif %}>GPT-4 Turbo</option>
+                        <option value="meta-llama/llama-3.1-8b-instruct" {% if settings.AI_MODEL == 'meta-llama/llama-3.1-8b-instruct' %}selected{% endif %}>Llama 3.1 8B</option>
+                        <option value="meta-llama/llama-3.1-70b-instruct" {% if settings.AI_MODEL == 'meta-llama/llama-3.1-70b-instruct' %}selected{% endif %}>Llama 3.1 70B</option>
+                    </optgroup>
+                </select>
+                <div class="hint">Choose a specific model or leave as auto-select for optimal performance.</div>
             </div>
+            
+            <div class="field">
+                <label for="GOOGLE_API_KEY">Google Gemini API Key {% if 'GOOGLE_API_KEY' in missing %}<span class="required">REQ</span>{% endif %}</label>
+                <input type="password" id="GOOGLE_API_KEY" name="GOOGLE_API_KEY" value="{{ settings.GOOGLE_API_KEY }}" placeholder="AIzaSy...">
+                <div class="hint">Required for Google Gemini. Get from <a href="https://makersuite.google.com/app/apikey" target="_blank">Google AI Studio</a></div>
+            </div>
+            
+            <div class="field">
+                <label for="MISTRAL_API_KEY">Mistral AI API Key {% if settings.AI_PROVIDER == 'mistral' and not settings.MISTRAL_API_KEY %}<span class="required">REQ</span>{% endif %}</label>
+                <input type="password" id="MISTRAL_API_KEY" name="MISTRAL_API_KEY" value="{{ settings.MISTRAL_API_KEY }}" placeholder="Your Mistral API key">
+                <div class="hint">Required for Mistral AI. Get from <a href="https://console.mistral.ai/" target="_blank">Mistral Console</a></div>
+            </div>
+            
+            <div class="field">
+                <label for="OPENROUTER_API_KEY">OpenRouter API Key {% if settings.AI_PROVIDER == 'openrouter' and not settings.OPENROUTER_API_KEY %}<span class="required">REQ</span>{% endif %}</label>
+                <input type="password" id="OPENROUTER_API_KEY" name="OPENROUTER_API_KEY" value="{{ settings.OPENROUTER_API_KEY }}" placeholder="sk-or-v1-...">
+                <div class="hint">Required for OpenRouter. Get from <a href="https://openrouter.ai/keys" target="_blank">OpenRouter</a></div>
+            </div>
+            
             <div class="field" style="grid-column:1 / -1;">
-                <label for="GEMINI_DAILY_QUOTAS">Daily Quotas JSON <span class="inline-badge">Optional</span></label>
-                <input type="text" id="GEMINI_DAILY_QUOTAS" name="GEMINI_DAILY_QUOTAS" placeholder='{"gemini-2.5-flash-lite": 150}' value="{{ settings.GEMINI_DAILY_QUOTAS }}">
+                <label for="AI_DAILY_QUOTAS">Daily Quotas JSON <span class="inline-badge">Optional</span></label>
+                <input type="text" id="AI_DAILY_QUOTAS" name="AI_DAILY_QUOTAS" placeholder='{"model-name": 150}' value="{{ settings.AI_DAILY_QUOTAS }}">
                 <div class="hint">Map model → max calls per day. Enforced locally. Example: <code>{"gemini-2.5-flash-lite": 150}</code></div>
             </div>
         </div>
 
-        <h3>Integrations</h3>
+        <h3>Optional Integrations</h3>
         <div class="grid">
             <div class="field">
-                <label for="TMDB_API_KEY">TMDb API Key <span class="inline-badge">Optional</span></label>
+                <label for="TMDB_API_KEY">TMDb API Key</label>
                 <input type="password" id="TMDB_API_KEY" name="TMDB_API_KEY" value="{{ settings.TMDB_API_KEY }}" placeholder="Paste your TMDb API key">
                 <div class="hint">Adds high-quality posters, overview text, runtime & vote averages.</div>
             </div>
             <div class="field">
-                <label for="OVERSEERR_URL">Overseerr URL <span class="inline-badge">Optional</span></label>
+                <label for="OVERSEERR_URL">Overseerr URL</label>
                 <input type="text" id="OVERSEERR_URL" name="OVERSEERR_URL" value="{{ settings.OVERSEERR_URL }}" placeholder="http://localhost:5055">
                 <div class="hint">Base URL to your Overseerr instance for availability checks and deep links.</div>
             </div>
             <div class="field">
-                <label for="OVERSEERR_API_KEY">Overseerr API Key <span class="inline-badge">Optional</span></label>
+                <label for="OVERSEERR_API_KEY">Overseerr API Key</label>
                 <input type="password" id="OVERSEERR_API_KEY" name="OVERSEERR_API_KEY" value="{{ settings.OVERSEERR_API_KEY }}" placeholder="Paste your Overseerr API key">
                 <div class="hint">Not required for deep links; enables potential future authenticated Overseerr features.</div>
             </div>
-    </div>
+        </div>
 
         <button type="submit" id="save-btn">Save Settings</button>
+
     </form>
+    
+    <!-- Loading overlay for save process -->
+    <div id="save-overlay" class="save-overlay">
+        <div class="save-overlay-content">
+            <div class="save-spinner"></div>
+            <h3>Saving Settings...</h3>
+            <p>Applying your configuration changes</p>
+        </div>
+    </div>
 
     <div class="divider"></div>
     <h3>Feature Activation</h3>
@@ -157,12 +349,17 @@
     <script>
         setTimeout(function() {
             window.location.href = "{{ url_for('index') }}";
-        }, 1000);
+        }, 3000); // Increased to 3 seconds to show the success message
     </script>
     {% endif %}
     <script>
         // Mask API keys by default; reveal on focus, re-mask on blur
         (function() {
+            // Hide loading overlay on page load (in case of redirect with success message)
+            const overlayElement = document.getElementById('save-overlay');
+            if (overlayElement) {
+                overlayElement.classList.remove('visible');
+            }
             function secureField(id) {
                 var el = document.getElementById(id);
                 if (!el) return;
@@ -178,8 +375,92 @@
             secureField('PLEX_TOKEN');
             secureField('TAUTULLI_API_KEY');
             secureField('GOOGLE_API_KEY');
-            secureField('TMDB_API_KEY');
-            secureField('OVERSEERR_API_KEY');
+            secureField('MISTRAL_API_KEY');
+            secureField('OPENROUTER_API_KEY');
+            
+            // Handle AI provider and model selection
+            const providerSelect = document.getElementById('AI_PROVIDER');
+            const modelSelect = document.getElementById('AI_MODEL');
+            const geminiModels = document.getElementById('gemini-models');
+            const mistralModels = document.getElementById('mistral-models');
+            const openrouterModels = document.getElementById('openrouter-models');
+            
+            function updateModelOptions() {
+                const selectedProvider = providerSelect.value;
+                
+                // Hide all model groups
+                if (geminiModels) geminiModels.style.display = 'none';
+                if (mistralModels) mistralModels.style.display = 'none';
+                if (openrouterModels) openrouterModels.style.display = 'none';
+                
+                // Show the appropriate model group
+                if (selectedProvider === 'gemini' && geminiModels) {
+                    geminiModels.style.display = 'block';
+                } else if (selectedProvider === 'mistral' && mistralModels) {
+                    mistralModels.style.display = 'block';
+                } else if (selectedProvider === 'openrouter' && openrouterModels) {
+                    openrouterModels.style.display = 'block';
+                }
+                
+                // Reset model selection if current selection is not valid for new provider
+                if (modelSelect && modelSelect.value) {
+                    const selectedOption = modelSelect.querySelector(`option[value="${modelSelect.value}"]`);
+                    if (selectedOption && selectedOption.parentElement.style.display === 'none') {
+                        modelSelect.value = '';
+                    }
+                }
+            }
+            
+            if (providerSelect) {
+                providerSelect.addEventListener('change', updateModelOptions);
+                updateModelOptions(); // Initial call
+            }
+            
+            // Enhanced save process with loading overlay
+            const saveBtn = document.getElementById('save-btn');
+            const saveBtnTop = document.getElementById('save-btn-top');
+            const form = document.getElementById('settings-form');
+            const saveOverlay = document.getElementById('save-overlay');
+            
+            function setupSaveButton(btn) {
+                if (btn && form && saveOverlay) {
+                    form.addEventListener('submit', function(e) {
+                        // Show loading overlay immediately
+                        saveOverlay.classList.add('visible');
+                        // Disable both buttons
+                        if (saveBtn) {
+                            saveBtn.disabled = true;
+                            saveBtn.textContent = 'Saving Settings...';
+                            saveBtn.style.opacity = '0.7';
+                        }
+                        if (saveBtnTop) {
+                            saveBtnTop.disabled = true;
+                            saveBtnTop.textContent = 'Saving Settings...';
+                            saveBtnTop.style.opacity = '0.7';
+                        }
+                        
+                        // Add a timeout to hide overlay if something goes wrong
+                        setTimeout(function() {
+                            saveOverlay.classList.remove('visible');
+                        }, 10000); // 10 second timeout
+                    });
+                }
+            }
+            
+            // Setup both save buttons
+            setupSaveButton(saveBtn);
+            setupSaveButton(saveBtnTop);
+            
+            // Auto-hide success message after showing
+            const successMsg = document.querySelector('.msg.success');
+            if (successMsg) {
+                setTimeout(function() {
+                    successMsg.style.animation = 'slideOut 0.3s ease-out forwards';
+                    setTimeout(function() {
+                        successMsg.style.display = 'none';
+                    }, 300);
+                }, 2500); // Show for 2.5 seconds
+            }
         })();
     </script>
 </body>

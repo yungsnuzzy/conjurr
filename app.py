@@ -25,9 +25,11 @@ import json
 from datetime import datetime, date, time as datetime_time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import sys
+import pickle
+import hashlib
 
 # App version (displayed in UI)
-VERSION = "v3.8 beta (The 'tap to pay [cache-less]' update)"
+VERSION = "v3.9 beta (The 'super model' update)"
 
 # PyInstaller compatibility
 def get_base_path():
@@ -191,6 +193,37 @@ def debug():
     <p>Routes: {[rule.rule for rule in app.url_map.iter_rules()]}</p>
     """
 
+# Cache management route
+@app.route('/cache')
+def cache_info():
+    cache_size = len(_TMDB_SEARCH_CACHE)
+    cache_file_exists = os.path.exists(_TMDB_CACHE_FILE)
+    cache_file_size = os.path.getsize(_TMDB_CACHE_FILE) if cache_file_exists else 0
+
+    return f"""
+    <h1>TMDb Cache Info</h1>
+    <p>In-memory cache size: {cache_size} entries</p>
+    <p>Persistent cache file: {'Exists' if cache_file_exists else 'Not found'}</p>
+    <p>Cache file size: {cache_file_size} bytes</p>
+    <p>Cache file path: {_TMDB_CACHE_FILE}</p>
+    <br>
+    <a href="/cache/clear">Clear Cache</a> | <a href="/cache/save">Save Cache</a> | <a href="/">Back to Main</a>
+    """
+
+@app.route('/cache/clear')
+def clear_cache():
+    global _TMDB_SEARCH_CACHE
+    with _TMDB_CACHE_LOCK:
+        _TMDB_SEARCH_CACHE.clear()
+    if os.path.exists(_TMDB_CACHE_FILE):
+        os.remove(_TMDB_CACHE_FILE)
+    return "Cache cleared. <a href='/cache'>Back to cache info</a>"
+
+@app.route('/cache/save')
+def save_cache():
+    _save_tmdb_cache()
+    return "Cache saved. <a href='/cache'>Back to cache info</a>"
+
 # Print startup info
 print(f"Flask app starting...")
 print(f"Base path: {base_path}")
@@ -216,6 +249,12 @@ def get_settings():
         'PLEX_URL': 'http://localhost:32400',
         'PLEX_TOKEN': '',
         'TAUTULLI_CACHE_REBUILD_TIME': '03:00',
+        'SELECTED_LIBRARIES': [],
+        'MISTRAL_API_KEY': '',
+        'OPENROUTER_API_KEY': '',
+        'AI_PROVIDER': 'gemini',
+        'AI_MODEL': '',
+        'AI_DAILY_QUOTAS': '',
     }
     # Suggested default DB path (Windows)
     try:
@@ -248,7 +287,20 @@ def get_settings():
             vals = {}
         result = {}
         for k in defaults.keys():
-            result[k] = vals.get(k) or os.environ.get(k, defaults[k])
+            val = vals.get(k) or os.environ.get(k, defaults[k])
+            # Parse JSON strings back to lists for certain fields
+            if k == 'SELECTED_LIBRARIES' and val:
+                try:
+                    import json
+                    if val.startswith('[') and val.endswith(']'):
+                        result[k] = json.loads(val)
+                    else:
+                        # Handle legacy comma-separated format
+                        result[k] = [v.strip() for v in val.split(',') if v.strip()]
+                except Exception:
+                    result[k] = defaults[k]
+            else:
+                result[k] = val
         return result
 
 def save_settings(new_settings):
@@ -259,7 +311,12 @@ def save_settings(new_settings):
             return (ok, err)
         else:
             for k, v in new_settings.items():
-                set_key(ENV_PATH, k, '' if v is None else str(v))
+                if isinstance(v, list):
+                    # Convert lists to JSON strings for storage
+                    import json
+                    set_key(ENV_PATH, k, json.dumps(v))
+                else:
+                    set_key(ENV_PATH, k, '' if v is None else str(v))
             load_dotenv(ENV_PATH, override=True)
             return True, None
     except Exception as e:
@@ -288,6 +345,11 @@ def reload_settings():
     g.GEMINI_MODEL = settings.get('GEMINI_MODEL', '').strip()
     g.PLEX_URL = (settings.get('PLEX_URL', '') or '').rstrip('/')
     g.PLEX_TOKEN = settings.get('PLEX_TOKEN', '').strip()
+    # Load selected libraries
+    g.SELECTED_LIBRARIES = settings.get('SELECTED_LIBRARIES', [])
+    if isinstance(g.SELECTED_LIBRARIES, str):
+        # Handle legacy format
+        g.SELECTED_LIBRARIES = [lib.strip() for lib in g.SELECTED_LIBRARIES.split(',') if lib.strip()]
     # Optional library inclusion filter: comma-separated section_ids (ints). Empty => include all for that type.
     raw_libs = ''  # library inclusion filter deprecated
     include_ids = set()
@@ -303,31 +365,55 @@ def reload_settings():
                 # keep raw as fallback string id
                 include_ids.add(p)
     g.TAUTULLI_INCLUDE_LIBRARIES = set()  # deprecated
-    # Optional: user-provided daily quotas per model as JSON, e.g. {"gemini-2.0-flash-001":200}
-    g.GEMINI_DAILY_QUOTAS = {}
+    # AI Provider Configuration
+    g.AI_PROVIDER = settings.get('AI_PROVIDER', 'gemini')
+    g.AI_MODEL = settings.get('AI_MODEL', '').strip()
+    g.AI_DAILY_QUOTAS = {}
     try:
         import json as _json
-        raw_q = settings.get('GEMINI_DAILY_QUOTAS')
+        raw_q = settings.get('AI_DAILY_QUOTAS')
         if raw_q:
-            g.GEMINI_DAILY_QUOTAS = _json.loads(raw_q)
+            g.AI_DAILY_QUOTAS = _json.loads(raw_q)
     except Exception:
-        g.GEMINI_DAILY_QUOTAS = {}
+        g.AI_DAILY_QUOTAS = {}
+    
+    # Backward compatibility - map old settings to new ones
+    if not settings.get('AI_PROVIDER') and settings.get('GOOGLE_API_KEY'):
+        g.AI_PROVIDER = 'gemini'
+    if not settings.get('AI_MODEL') and settings.get('GEMINI_MODEL'):
+        g.AI_MODEL = settings.get('GEMINI_MODEL', '').strip()
+    if not g.AI_DAILY_QUOTAS and settings.get('GEMINI_DAILY_QUOTAS'):
+        try:
+            g.AI_DAILY_QUOTAS = _json.loads(settings.get('GEMINI_DAILY_QUOTAS', '{}'))
+        except Exception:
+            g.AI_DAILY_QUOTAS = {}
+    
+    # Initialize AI clients based on provider
     g.genai_client = None
     g.genai_sdk = None
-    if g.GOOGLE_API_KEY and genai is not None:
-        try:
-            if _GENAI_SDK == 'new':
-                # New SDK client
-                g.genai_client = genai.Client(api_key=g.GOOGLE_API_KEY)
-                g.genai_sdk = 'new'
-            elif _GENAI_SDK == 'legacy':
-                # Legacy SDK uses global configure()
-                genai.configure(api_key=g.GOOGLE_API_KEY)
-                g.genai_client = 'legacy'
-                g.genai_sdk = 'legacy'
-        except Exception:
-            g.genai_client = None
-            g.genai_sdk = None
+    if g.AI_PROVIDER == 'gemini' and settings.get('GOOGLE_API_KEY'):
+        g.GOOGLE_API_KEY = settings['GOOGLE_API_KEY']
+        if genai is not None:
+            try:
+                if _GENAI_SDK == 'new':
+                    g.genai_client = genai.Client(api_key=g.GOOGLE_API_KEY)
+                    g.genai_sdk = 'new'
+                elif _GENAI_SDK == 'legacy':
+                    genai.configure(api_key=g.GOOGLE_API_KEY)
+                    g.genai_client = 'legacy'
+                    g.genai_sdk = 'legacy'
+            except Exception:
+                g.genai_client = None
+                g.genai_sdk = None
+    elif g.AI_PROVIDER == 'mistral' and settings.get('MISTRAL_API_KEY'):
+        g.MISTRAL_API_KEY = settings['MISTRAL_API_KEY']
+    elif g.AI_PROVIDER == 'openrouter' and settings.get('OPENROUTER_API_KEY'):
+        g.OPENROUTER_API_KEY = settings['OPENROUTER_API_KEY']
+    
+    # Keep old variables for backward compatibility
+    g.GOOGLE_API_KEY = settings.get('GOOGLE_API_KEY', '')
+    g.GEMINI_MODEL = g.AI_MODEL
+    g.GEMINI_DAILY_QUOTAS = g.AI_DAILY_QUOTAS
 
 
 # Plex API Client for direct availability checking
@@ -372,7 +458,7 @@ class PlexClient:
             print(f"Error getting Plex libraries: {e}")
         return []
     
-    def check_availability_for_items(self, items, media_type):
+    def check_availability_for_items(self, items, media_type, selected_libraries=None):
         """Check availability for specific items only using targeted Plex API searches"""
         if not items:
             return {}
@@ -381,8 +467,13 @@ class PlexClient:
         libraries = self.get_libraries()
         relevant_libraries = [lib for lib in libraries if lib['type'] == media_type]
         
+        # Filter by selected libraries if provided
+        if selected_libraries:
+            selected_libraries = [str(lib) for lib in selected_libraries]  # Ensure string format
+            relevant_libraries = [lib for lib in relevant_libraries if str(lib['key']) in selected_libraries]
+        
         if not relevant_libraries:
-            print(f"DEBUG: No {media_type} libraries found")
+            print(f"DEBUG: No {media_type} libraries found (after filtering)")
             return {item.get('title') if isinstance(item, dict) else item: False for item in items}
         
         print(f"DEBUG: Checking availability for {len(items)} {media_type} items using targeted searches (no library scanning)")
@@ -622,7 +713,7 @@ def get_cached_users():
     return users
 
 # Helper to fetch user watch history from Tautulli
-def get_user_watch_history_api(user_id):
+def get_user_watch_history_api(user_id, selected_libraries=None):
     """Always fetch recent (bounded window) history via API for top/recent calculations."""
     one_year_ago = int(time.time()) - 365*24*60*60
     params = {
@@ -635,29 +726,41 @@ def get_user_watch_history_api(user_id):
     try:
         resp = requests.get(f"{g.TAUTULLI_URL}/api/v2", params=params, timeout=5)
         data = resp.json()
-        return data.get('response', {}).get('data', {}).get('data', [])
+        items = data.get('response', {}).get('data', {}).get('data', [])
+        
+        # Filter by selected libraries if provided and section_id is available
+        if selected_libraries and items:
+            selected_libraries = [str(lib) for lib in selected_libraries]  # Ensure string format
+            filtered_items = []
+            for item in items:
+                section_id = item.get('section_id')
+                if section_id is None or str(section_id) in selected_libraries:
+                    filtered_items.append(item)
+            items = filtered_items
+        
+        return items
     except Exception:
         return []
 
-def get_user_watch_history(user_id):
+def get_user_watch_history(user_id, selected_libraries=None):
     """Retained for backward compatibility: prefer DB for recent subset if available, else API.
     Not used for top/recent anymore (we explicitly call API)."""
     one_year_ago = int(time.time()) - 365*24*60*60
     if getattr(g, 'use_tautulli_db', False):
         try:
             from tautulli_db import db_get_user_watch_history
-            return db_get_user_watch_history(g.TAUTULLI_DB_PATH, user_id, after=one_year_ago, limit=1000)
+            return db_get_user_watch_history(g.TAUTULLI_DB_PATH, user_id, after=one_year_ago, limit=1000, selected_libraries=selected_libraries)
         except Exception:
             pass
     return get_user_watch_history_api(user_id)
 
 # Helper to fetch the user's entire watch history from Tautulli (paginated)
-def get_user_watch_history_all(user_id):
+def get_user_watch_history_all(user_id, selected_libraries=None):
     # Prefer DB if available
     if getattr(g, 'use_tautulli_db', False):
         try:
             from tautulli_db import db_get_user_watch_history_all
-            return db_get_user_watch_history_all(g.TAUTULLI_DB_PATH, user_id)
+            return db_get_user_watch_history_all(g.TAUTULLI_DB_PATH, user_id, selected_libraries=selected_libraries)
         except Exception:
             pass
     start = 0
@@ -681,6 +784,17 @@ def get_user_watch_history_all(user_id):
                 total_records = payload.get('recordsTotal') or payload.get('recordsFiltered')
             if not items:
                 break
+            
+            # Filter by selected libraries if provided
+            if selected_libraries:
+                selected_libraries = [str(lib) for lib in selected_libraries]  # Ensure string format
+                filtered_items = []
+                for item in items:
+                    section_id = item.get('section_id')
+                    if section_id is None or str(section_id) in selected_libraries:
+                        filtered_items.append(item)
+                items = filtered_items
+            
             all_items.extend(items)
             # Stop if we've collected all records
             if total_records is not None and len(all_items) >= int(total_records):
@@ -923,15 +1037,120 @@ def _format_runtime_minutes(minutes: int | None) -> str | None:
 
 _TMDB_SEARCH_CACHE: dict[tuple[str, str, int | None], dict | None] = {}
 
+# Persistent TMDb cache for better performance across requests
+_TMDB_CACHE_FILE = os.path.join(get_appdata_dir(), 'tmdb_cache.pkl')
+_TMDB_CACHE_LOCK = threading.Lock()
+_TMDB_CACHE_MAX_SIZE = 10000  # Limit cache size to prevent memory issues
+
+def _load_tmdb_cache():
+    """Load persistent TMDb cache from disk."""
+    try:
+        if os.path.exists(_TMDB_CACHE_FILE):
+            with open(_TMDB_CACHE_FILE, 'rb') as f:
+                cache_data = pickle.load(f)
+                # Validate cache structure
+                if isinstance(cache_data, dict):
+                    return cache_data
+    except Exception:
+        pass
+    return {}
+
+def _save_tmdb_cache():
+    """Save TMDb cache to disk."""
+    try:
+        with _TMDB_CACHE_LOCK:
+            # Limit cache size before saving
+            if len(_TMDB_SEARCH_CACHE) > _TMDB_CACHE_MAX_SIZE:
+                # Keep most recently used items
+                items = list(_TMDB_SEARCH_CACHE.items())
+                items.sort(key=lambda x: hash(x[0]) % 1000)  # Simple pseudo-random ordering
+                _TMDB_SEARCH_CACHE.clear()
+                _TMDB_SEARCH_CACHE.update(dict(items[:_TMDB_CACHE_MAX_SIZE]))
+
+            with open(_TMDB_CACHE_FILE, 'wb') as f:
+                pickle.dump(_TMDB_SEARCH_CACHE, f)
+    except Exception:
+        pass
+
+def _get_cache_key(media_type: str, title: str, year: int | None) -> tuple[str, str, int | None]:
+    """Generate a consistent cache key."""
+    return (media_type, title.lower().strip(), year)
+
+# Load persistent cache on startup
+_TMDB_SEARCH_CACHE.update(_load_tmdb_cache())
+
+def get_posters_batch(media_type: str, title_lists: list[list[str]], year_maps: list[dict], pre_tmdb_maps: list[dict], max_workers: int = 10, fetch_details: bool = True) -> list[list[dict]]:
+    """Fetch posters for multiple title lists in a single optimized batch operation.
+
+    Args:
+        media_type: 'show' or 'movie'
+        title_lists: List of title lists to process
+        year_maps: Corresponding year maps for each title list
+        pre_tmdb_maps: Corresponding pre-resolved TMDb ID maps
+        max_workers: Maximum concurrent workers
+        fetch_details: Whether to fetch additional details
+
+    Returns:
+        List of poster result lists corresponding to input title_lists
+    """
+    if not title_lists:
+        return []
+
+    # Combine all titles for batch processing
+    all_titles = []
+    title_to_list_idx = {}  # Track which result list each title belongs to
+
+    for list_idx, titles in enumerate(title_lists):
+        for title in titles:
+            if title:
+                all_titles.append(title)
+                title_to_list_idx[title] = list_idx
+
+    if not all_titles:
+        return [[] for _ in title_lists]
+
+    # Create combined year map and pre_tmdb_map
+    combined_year_map = {}
+    combined_pre_tmdb_map = {}
+
+    for list_idx, (year_map, pre_tmdb_map) in enumerate(zip(year_maps, pre_tmdb_maps)):
+        for title in title_lists[list_idx]:
+            if title:
+                if year_map and title in year_map:
+                    combined_year_map[title] = year_map[title]
+                if pre_tmdb_map and title in pre_tmdb_map:
+                    combined_pre_tmdb_map[title] = pre_tmdb_map[title]
+
+    # Fetch all posters in one batch
+    all_posters = get_posters_for_titles(
+        media_type,
+        all_titles,
+        combined_year_map,
+        max_workers=max_workers,
+        fetch_details=fetch_details,
+        pre_tmdb_map=combined_pre_tmdb_map
+    )
+
+    # Split results back into separate lists
+    results = [[] for _ in title_lists]
+    for poster in all_posters:
+        title = poster.get('title')
+        if title in title_to_list_idx:
+            list_idx = title_to_list_idx[title]
+            results[list_idx].append(poster)
+
+    return results
+
 def get_posters_for_titles(media_type: str, titles: list[str], year_map: dict | None = None, *, max_workers: int = 10, fetch_details: bool = True, pre_tmdb_map: dict | None = None) -> list[dict]:
     """Fetch posters (and optionally details) for a list of titles more quickly.
 
     Optimizations:
-    - Per-process in-memory cache for TMDb search results (_TMDB_SEARCH_CACHE)
+    - Per-process in-memory cache with persistent disk backup (_TMDB_SEARCH_CACHE)
     - Threaded concurrent search+details fetch (default 6 workers)
     - Skip duplicate titles
     - If year-hint search fails, fall back once without year
     - Details fetch can be disabled via fetch_details flag
+    - Batch processing for better parallelism
     """
     api_key = getattr(g, 'TMDB_API_KEY', '') if hasattr(g, 'TMDB_API_KEY') else ''
     if not api_key:
@@ -939,170 +1158,206 @@ def get_posters_for_titles(media_type: str, titles: list[str], year_map: dict | 
     year_map = year_map or {}
     pre_tmdb_map = pre_tmdb_map or {}
     overseerr_base = getattr(g, 'OVERSEERR_URL', '') or ''
+
     # Preserve input order while de-duplicating
     seen = set()
-    work: list[tuple[int, str]] = []
-    for idx, t in enumerate(titles):
-        if not t:
+    work_items = []
+    for idx, title in enumerate(titles):
+        if not title:
             continue
-        if t in seen:
+        title_key = title.lower().strip()
+        if title_key in seen:
             continue
-        seen.add(t)
-        work.append((idx, t))
-    if not work:
+        seen.add(title_key)
+        work_items.append((idx, title))
+
+    if not work_items:
         return []
 
-    def _search_one(title: str):
-        year_hint = year_map.get(title) or _extract_year_from_title(title)
-        # Cache key uses lower title + year (may be None)
-        preset_id = pre_tmdb_map.get(title)
-        if preset_id:
-            # Fast path: fetch details for poster (store in cache using year-hint key)
-            key_direct = (media_type, f"__direct_{preset_id}", None)
-            res_direct = _TMDB_SEARCH_CACHE.get(key_direct)
-            if res_direct is None:
-                try:
-                    base = 'https://api.themoviedb.org/3'
-                    url = f"{base}/movie/{preset_id}" if media_type == 'movie' else f"{base}/tv/{preset_id}"
-                    resp_d = requests.get(url, params={'api_key': api_key, 'language': 'en-US'}, timeout=6)
-                    if resp_d.status_code == 200:
-                        jd = resp_d.json() or {}
-                        path = jd.get('poster_path')
-                        if path:
-                            res_direct = {'poster_url': f"https://image.tmdb.org/t/p/w342{path}", 'tmdb_id': preset_id}
-                except Exception:
-                    res_direct = None
-                _TMDB_SEARCH_CACHE[key_direct] = res_direct
-            if res_direct:
-                return year_hint, res_direct
-        key = (media_type, title.lower(), year_hint if isinstance(year_hint, int) else None)
-        res = _TMDB_SEARCH_CACHE.get(key)
-        if res is None:
-            # Local minimal search to avoid relying on Flask context inside threads
-            try:
-                base = 'https://api.themoviedb.org/3'
-                if media_type == 'movie':
-                    url = f"{base}/search/movie"
-                    params = {'api_key': api_key, 'query': title, 'include_adult': 'false'}
-                    if year_hint:
-                        params['year'] = year_hint
-                else:
-                    url = f"{base}/search/tv"
-                    params = {'api_key': api_key, 'query': title, 'include_adult': 'false'}
-                    if year_hint:
-                        params['first_air_date_year'] = year_hint
-                resp = requests.get(url, params=params, timeout=8)
-                j = resp.json()
-                results = j.get('results') or []
-                if results:
-                    ntarget = normalize_title(title)
-                    def score_item(it):
-                        name = it.get('title') or it.get('name') or ''
-                        year_field = it.get('release_date') or it.get('first_air_date') or ''
-                        year_val = None
-                        if isinstance(year_field, str) and len(year_field) >= 4:
-                            try:
-                                year_val = int(year_field[:4])
-                            except Exception:
-                                year_val = None
-                        title_score = fuzz.token_sort_ratio(ntarget, normalize_title(name))
-                        year_bonus = 5 if (year_hint and year_val == year_hint) else 0
-                        return (title_score + year_bonus, title_score, it.get('popularity') or 0)
-                    best = sorted(results, key=score_item, reverse=True)[0]
-                    path = best.get('poster_path')
-                    tmdb_id = best.get('id')
-                    if path and tmdb_id:
-                        res = {'poster_url': f"https://image.tmdb.org/t/p/w342{path}", 'tmdb_id': tmdb_id}
-                    else:
-                        res = None
-                else:
-                    res = None
-            except Exception:
-                res = None
-            # Fallback without year if nothing found and we had a year
-            if not res and year_hint:
-                key2 = (media_type, title.lower(), None)
-                res2 = _TMDB_SEARCH_CACHE.get(key2)
-                if res2 is None:
-                    # second attempt without year
+    # Batch processing for better parallelism
+    def _process_batch(batch_items):
+        """Process a batch of items concurrently."""
+        results = []
+
+        def _search_single(item_idx, title):
+            """Search for a single title with caching."""
+            year_hint = year_map.get(title) or _extract_year_from_title(title)
+
+            # Check pre-resolved TMDb ID first
+            preset_id = pre_tmdb_map.get(title)
+            if preset_id:
+                key_direct = _get_cache_key(media_type, f"__direct_{preset_id}", None)
+                res_direct = _TMDB_SEARCH_CACHE.get(key_direct)
+                if res_direct is None:
                     try:
                         base = 'https://api.themoviedb.org/3'
-                        if media_type == 'movie':
-                            url = f"{base}/search/movie"
-                            params = {'api_key': api_key, 'query': title, 'include_adult': 'false'}
-                        else:
-                            url = f"{base}/search/tv"
-                            params = {'api_key': api_key, 'query': title, 'include_adult': 'false'}
-                        resp2 = requests.get(url, params=params, timeout=8)
-                        j2 = resp2.json()
-                        results2 = j2.get('results') or []
-                        if results2:
-                            ntarget2 = normalize_title(title)
-                            def score_item2(it):
-                                name = it.get('title') or it.get('name') or ''
-                                title_score = fuzz.token_sort_ratio(ntarget2, normalize_title(name))
-                                return (title_score, it.get('popularity') or 0)
-                            best2 = sorted(results2, key=score_item2, reverse=True)[0]
-                            path2 = best2.get('poster_path')
-                            tmdb_id2 = best2.get('id')
-                            if path2 and tmdb_id2:
-                                res2 = {'poster_url': f"https://image.tmdb.org/t/p/w342{path2}", 'tmdb_id': tmdb_id2}
-                            else:
-                                res2 = None
-                        else:
-                            res2 = None
+                        url = f"{base}/movie/{preset_id}" if media_type == 'movie' else f"{base}/tv/{preset_id}"
+                        resp_d = requests.get(url, params={'api_key': api_key, 'language': 'en-US'}, timeout=6)
+                        if resp_d.status_code == 200:
+                            jd = resp_d.json() or {}
+                            path = jd.get('poster_path')
+                            if path:
+                                res_direct = {'poster_url': f"https://image.tmdb.org/t/p/w342{path}", 'tmdb_id': preset_id}
                     except Exception:
-                        res2 = None
-                    _TMDB_SEARCH_CACHE[key2] = res2
-                res = res2
-            _TMDB_SEARCH_CACHE[key] = res
-        return year_hint, res
+                        res_direct = None
+                    _TMDB_SEARCH_CACHE[key_direct] = res_direct
+                if res_direct:
+                    return item_idx, year_hint, res_direct
 
-    def _details_for(media_type: str, tmdb_id: int):
-        try:
-            # local details call (cannot rely on g inside thread safely)
-            if not tmdb_id:
-                return None
-            base = 'https://api.themoviedb.org/3'
-            url = f"{base}/movie/{tmdb_id}" if media_type == 'movie' else f"{base}/tv/{tmdb_id}"
-            resp = requests.get(url, params={'api_key': api_key, 'language': 'en-US'}, timeout=6)
-            if resp.status_code != 200:
-                return None
-            return resp.json() or {}
-        except Exception:
-            return None
+            # Check regular cache
+            cache_key = _get_cache_key(media_type, title, year_hint if isinstance(year_hint, int) else None)
+            cached_result = _TMDB_SEARCH_CACHE.get(cache_key)
+            if cached_result is not None:
+                return item_idx, year_hint, cached_result
 
-    results_tmp: list[tuple[int, dict]] = []
+            # Perform TMDb search
+            result = None
+            try:
+                base = 'https://api.themoviedb.org/3'
+                search_url = f"{base}/search/movie" if media_type == 'movie' else f"{base}/search/tv"
+                params = {'api_key': api_key, 'query': title, 'include_adult': 'false'}
+                if year_hint:
+                    if media_type == 'movie':
+                        params['primary_release_year'] = year_hint
+                    else:
+                        params['first_air_date_year'] = year_hint
 
-    # Phase 1: concurrent search (and optional details)
-    # Bound workers to number of tasks
-    workers = min(max_workers, len(work)) if max_workers > 1 else 1
-    if workers <= 1:
-        # Fallback sequential (unlikely)
-        for idx, title in work:
-            year_hint, search = _search_one(title)
+                resp = requests.get(search_url, params=params, timeout=8)
+                if resp.status_code == 200:
+                    j = resp.json()
+                    results = j.get('results') or []
+                    if results:
+                        ntarget = normalize_title(title)
+                        def score_item(it):
+                            name = it.get('title') or it.get('name') or ''
+                            year_field = it.get('release_date') or it.get('first_air_date') or ''
+                            year_val = None
+                            if isinstance(year_field, str) and len(year_field) >= 4:
+                                try:
+                                    year_val = int(year_field[:4])
+                                except Exception:
+                                    year_val = None
+                            title_score = fuzz.token_sort_ratio(ntarget, normalize_title(name))
+                            year_bonus = 5 if (year_hint and year_val == year_hint) else 0
+                            return (title_score + year_bonus, title_score, it.get('popularity') or 0)
+
+                        best = sorted(results, key=score_item, reverse=True)[0]
+                        path = best.get('poster_path')
+                        tmdb_id = best.get('id')
+                        if path and tmdb_id:
+                            result = {'poster_url': f"https://image.tmdb.org/t/p/w342{path}", 'tmdb_id': tmdb_id}
+            except Exception:
+                pass
+
+            # Fallback without year if nothing found and we had a year
+            if not result and year_hint:
+                fallback_key = _get_cache_key(media_type, title, None)
+                fallback_result = _TMDB_SEARCH_CACHE.get(fallback_key)
+                if fallback_result is not None:
+                    result = fallback_result
+                else:
+                    try:
+                        base = 'https://api.themoviedb.org/3'
+                        search_url = f"{base}/search/movie" if media_type == 'movie' else f"{base}/search/tv"
+                        params = {'api_key': api_key, 'query': title, 'include_adult': 'false'}
+                        resp2 = requests.get(search_url, params=params, timeout=8)
+                        if resp2.status_code == 200:
+                            j2 = resp2.json()
+                            results2 = j2.get('results') or []
+                            if results2:
+                                ntarget2 = normalize_title(title)
+                                def score_item2(it):
+                                    name = it.get('title') or it.get('name') or ''
+                                    title_score = fuzz.token_sort_ratio(ntarget2, normalize_title(name))
+                                    return (title_score, it.get('popularity') or 0)
+                                best2 = sorted(results2, key=score_item2, reverse=True)[0]
+                                path2 = best2.get('poster_path')
+                                tmdb_id2 = best2.get('id')
+                                if path2 and tmdb_id2:
+                                    result = {'poster_url': f"https://image.tmdb.org/t/p/w342{path2}", 'tmdb_id': tmdb_id2}
+                        _TMDB_SEARCH_CACHE[fallback_key] = result
+                    except Exception:
+                        _TMDB_SEARCH_CACHE[fallback_key] = None
+
+            # Cache the result
+            _TMDB_SEARCH_CACHE[cache_key] = result
+            return item_idx, year_hint, result
+
+        def _fetch_details_batch(search_results):
+            """Fetch details for multiple items concurrently."""
+            if not fetch_details:
+                return search_results
+
+            details_results = []
+            def _fetch_single_detail(idx, year_hint, search_result):
+                if not search_result or not isinstance(search_result, dict):
+                    return idx, year_hint, search_result, None, None, None
+
+                tmdb_id = search_result.get('tmdb_id')
+                if not tmdb_id:
+                    return idx, year_hint, search_result, None, None, None
+
+                try:
+                    base = 'https://api.themoviedb.org/3'
+                    url = f"{base}/movie/{tmdb_id}" if media_type == 'movie' else f"{base}/tv/{tmdb_id}"
+                    resp = requests.get(url, params={'api_key': api_key, 'language': 'en-US'}, timeout=6)
+                    if resp.status_code == 200:
+                        details = resp.json() or {}
+                        overview = (details.get('overview') or '')[:500].strip() or None
+                        if media_type == 'movie':
+                            runtime_str = _format_runtime_minutes(details.get('runtime'))
+                        else:
+                            rt_list = details.get('episode_run_time')
+                            runtime_str = _format_runtime_minutes(rt_list[0]) if isinstance(rt_list, list) and rt_list else None
+                        vote_val = details.get('vote_average')
+                        vote = round(vote_val, 1) if isinstance(vote_val, (int, float)) and vote_val > 0 else None
+                        return idx, year_hint, search_result, overview, runtime_str, vote
+                except Exception:
+                    pass
+                return idx, year_hint, search_result, None, None, None
+
+            # Process details fetching concurrently
+            with ThreadPoolExecutor(max_workers=min(len(search_results), max_workers)) as executor:
+                detail_futures = [executor.submit(_fetch_single_detail, idx, year_hint, search) for idx, year_hint, search in search_results]
+                for future in as_completed(detail_futures):
+                    details_results.append(future.result())
+
+            return details_results
+
+        # Phase 1: Concurrent search
+        search_results = []
+        with ThreadPoolExecutor(max_workers=min(len(batch_items), max_workers)) as executor:
+            search_futures = [executor.submit(_search_single, batch_idx, title) for batch_idx, (orig_idx, title) in enumerate(batch_items)]
+            for future in as_completed(search_futures):
+                try:
+                    result = future.result()
+                    if result is not None:
+                        search_results.append(result)
+                except Exception:
+                    continue
+
+        # Phase 2: Concurrent details fetching (if requested)
+        if fetch_details:
+            search_results = _fetch_details_batch(search_results)
+
+        # Build final results
+        for item in search_results:
+            if len(item) == 3:  # No details
+                batch_idx, year_hint, search = item
+                overview = runtime_str = vote = None
+            else:  # With details
+                batch_idx, year_hint, search, overview, runtime_str, vote = item
+
             if not (search and isinstance(search, dict)):
                 continue
+
+            # Get original index and title from batch
+            orig_idx, title = batch_items[batch_idx]
+
             tmdb_id = search.get('tmdb_id')
-            overview = runtime_str = vote = None
-            if fetch_details and tmdb_id:
-                details = _details_for(media_type, tmdb_id)
-                if details:
-                    try:
-                        overview = (details.get('overview') or '')[:500].strip() or None
-                    except Exception:
-                        pass
-                    if media_type == 'movie':
-                        runtime_str = _format_runtime_minutes(details.get('runtime'))
-                    else:
-                        rt_list = details.get('episode_run_time')
-                        if isinstance(rt_list, list) and rt_list:
-                            runtime_str = _format_runtime_minutes(rt_list[0])
-                    vote_val = details.get('vote_average')
-                    if isinstance(vote_val, (int, float)) and vote_val > 0:
-                        vote = round(vote_val, 1)
             href = f"{overseerr_base}/{'movie' if media_type=='movie' else 'tv'}/{tmdb_id}" if overseerr_base and tmdb_id else None
-            results_tmp.append((idx, {
+
+            result_item = {
                 'title': title,
                 'url': search.get('poster_url'),
                 'source': 'tmdb',
@@ -1113,54 +1368,27 @@ def get_posters_for_titles(media_type: str, titles: list[str], year_map: dict | 
                 'runtime': runtime_str,
                 'vote': vote,
                 'media_type': media_type,
-            }))
-    else:
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            future_map = {executor.submit(_search_one, title): (idx, title) for idx, title in work}
-            for fut in as_completed(future_map):
-                idx, title = future_map[fut]
-                try:
-                    year_hint, search = fut.result()
-                except Exception:
-                    continue
-                if not (search and isinstance(search, dict)):
-                    continue
-                tmdb_id = search.get('tmdb_id')
-                overview = runtime_str = vote = None
-                details = None
-                if fetch_details and tmdb_id:
-                    # Fetch details in the same worker thread (sequential inside thread)
-                    details = _details_for(media_type, tmdb_id)
-                if details:
-                    try:
-                        overview = (details.get('overview') or '')[:500].strip() or None
-                    except Exception:
-                        pass
-                    if media_type == 'movie':
-                        runtime_str = _format_runtime_minutes(details.get('runtime'))
-                    else:
-                        rt_list = details.get('episode_run_time')
-                        if isinstance(rt_list, list) and rt_list:
-                            runtime_str = _format_runtime_minutes(rt_list[0])
-                    vote_val = details.get('vote_average')
-                    if isinstance(vote_val, (int, float)) and vote_val > 0:
-                        vote = round(vote_val, 1)
-                href = f"{overseerr_base}/{'movie' if media_type=='movie' else 'tv'}/{tmdb_id}" if overseerr_base and tmdb_id else None
-                results_tmp.append((idx, {
-                    'title': title,
-                    'url': search.get('poster_url'),
-                    'source': 'tmdb',
-                    'tmdb_id': tmdb_id,
-                    'href': href,
-                    'year': year_hint,
-                    'overview': overview,
-                    'runtime': runtime_str,
-                    'vote': vote,
-                    'media_type': media_type,
-                }))
+            }
+            results.append((orig_idx, result_item))
 
-    # Restore original order
-    posters = [p for _, p in sorted(results_tmp, key=lambda x: x[0]) if p.get('url')]
+        return results
+
+    # Process in batches for better parallelism
+    batch_size = max(5, len(work_items) // max_workers)
+    all_results = []
+
+    for i in range(0, len(work_items), batch_size):
+        batch = work_items[i:i + batch_size]
+        batch_results = _process_batch(batch)
+        all_results.extend(batch_results)
+
+    # Restore original order and save cache periodically
+    posters = [p for _, p in sorted(all_results, key=lambda x: x[0]) if p.get('url')]
+
+    # Save cache to disk periodically (every ~100 operations)
+    if len(_TMDB_SEARCH_CACHE) % 100 == 0:
+        threading.Thread(target=_save_tmdb_cache, daemon=True).start()
+
     return posters
 
 def extract_json_object(text: str) -> str | None:
@@ -1183,10 +1411,18 @@ def extract_json_object(text: str) -> str | None:
 
 
 # Dummy recommendation logic (to be improved)
-def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=None, mood_code=None):
+def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=None, mood_code=None, requested_model=None):
     import time
     timing = {}
     t0 = time.time()
+    
+    # Handle model override for API requests
+    original_ai_model = getattr(g, 'AI_MODEL', None)
+    original_gemini_model = getattr(g, 'GEMINI_MODEL', None)
+    if requested_model:
+        g.AI_MODEL = requested_model
+        g.GEMINI_MODEL = requested_model  # Also override Gemini model for consistency
+    
     # Attempt to capture requester IP from current Flask request context
     try:
         req_ip = None
@@ -1200,13 +1436,15 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             if not req_ip:
                 req_ip = _rq.remote_addr
         # Determine model to display for debugging
-        display_model = g.GEMINI_MODEL
+        display_model = g.AI_MODEL
         if not display_model:
             # Show the default model that will be tried first
-            if getattr(g, 'genai_sdk', None) == 'new':
+            if g.AI_PROVIDER == 'gemini':
                 display_model = 'gemini-2.5-flash-lite'  # first in default order
-            elif getattr(g, 'genai_sdk', None) == 'legacy':
-                display_model = 'gemini-pro'
+            elif g.AI_PROVIDER == 'mistral':
+                display_model = 'mistral-small'
+            elif g.AI_PROVIDER == 'openrouter':
+                display_model = 'anthropic/claude-3-haiku'
             else:
                 display_model = 'none'
         
@@ -1221,15 +1459,23 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             pass
         
         print(f"DEBUG: recommend_for_user called (ip={req_ip}) user_id={user_id} username={debug_username} mode={mode} decade={decade_code} genre={genre_code} mood={mood_code} model={display_model}")
+        
+        # Get selected libraries for filtering
+        selected_libraries = getattr(g, 'SELECTED_LIBRARIES', [])
+        if isinstance(selected_libraries, str):
+            selected_libraries = [selected_libraries] if selected_libraries else []
+        selected_libraries = [str(lib) for lib in selected_libraries]  # Ensure string format
     except Exception:
         # Determine model to display for debugging
-        display_model = g.GEMINI_MODEL
+        display_model = g.AI_MODEL
         if not display_model:
             # Show the default model that will be tried first
-            if getattr(g, 'genai_sdk', None) == 'new':
+            if g.AI_PROVIDER == 'gemini':
                 display_model = 'gemini-2.5-flash-lite'  # first in default order
-            elif getattr(g, 'genai_sdk', None) == 'legacy':
-                display_model = 'gemini-pro'
+            elif g.AI_PROVIDER == 'mistral':
+                display_model = 'mistral-small'
+            elif g.AI_PROVIDER == 'openrouter':
+                display_model = 'anthropic/claude-3-haiku'
             else:
                 display_model = 'none'
         
@@ -1300,7 +1546,7 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
 
     # Step 2b: Build an all-time watched set from FULL history (prefer DB) for filtering only
     t2a = time.time()
-    hist_all = get_user_watch_history_all(user_id)
+    hist_all = get_user_watch_history_all(user_id, selected_libraries)
     shows_all = [it.get('grandparent_title') for it in hist_all if it.get('media_type') == 'episode' and it.get('grandparent_title')]
     movies_all = [it.get('title') for it in hist_all if it.get('media_type') == 'movie' and it.get('title')]
     watched_set_all = set(shows_all + movies_all)
@@ -1323,18 +1569,18 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             if t and t not in seen_movies2:
                 watched_movies_unique.append(t)
                 seen_movies2.add(t)
-    # Cap what we include in the prompt to avoid exceeding model limits
+    # Cap what we include in the prompt to avoid exceeding model limits - OPTIMIZED FOR SPEED
     WATCHED_MAX_PER_TYPE = 100
     watched_shows_in_prompt = watched_shows_unique[:WATCHED_MAX_PER_TYPE]
     watched_movies_in_prompt = watched_movies_unique[:WATCHED_MAX_PER_TYPE]
 
     # Step 3: Skip legacy full-library prefetch (deprecated) – availability resolved later
-    debug = {'library_prefetch': 'skipped'}
+    debug = {'library_prefetch': 'skipped', 'selected_libraries': selected_libraries}
     timing['library_fetch'] = 0.0
 
     # Step 5: Gemini AI recommendations
     t4 = time.time()
-    gemini_recs = {'shows': [], 'movies': [], 'error': None, 'prompt': None, 'raw_response': None, 'parsed_json': None, 'available_models': None}
+    gemini_recs = {'shows': [], 'movies': [], 'error': None, 'prompt': None, 'raw_response': None, 'parsed_json': None, 'available_models': None, 'ai_endpoint': None}
     ai_recommended = {'shows': [], 'movies': [], 'categories': []}
     # Build selection descriptor for custom mode
     selection_desc = None
@@ -1405,28 +1651,33 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
     elif top_shows or top_movies or mode == 'custom':
         import json as pyjson
         if mode == 'history':
+            # Create more concise watched history summaries for faster processing
+            def _summarize_watched(items, max_items=20):
+                if len(items) <= max_items:
+                    return items
+                # Keep most recent and some variety
+                recent = items[:10]
+                remaining = items[10:max_items]
+                return recent + remaining
+
+            watched_shows_summary = _summarize_watched(watched_shows_in_prompt, 30)
+            watched_movies_summary = _summarize_watched(watched_movies_in_prompt, 30)
+
             prompt = (
-            "You are generating recommendations for a single, specific user. Treat this as a brand-new, stateless request. "
-            "Ignore any prior conversation or memory. Do not carry information across users or calls.\n"
-            f"User's top watched shows: {top_shows}\n"
-            f"User's top watched movies: {top_movies}\n"
-            f"User's recent shows (last 10, newest first): {last10_shows}\n"
-            f"User's recent movies (last 10, newest first): {last10_movies}\n"
-            f"Already watched shows (unique by recency, included {len(watched_shows_in_prompt)} of {len(watched_shows_unique)}): {watched_shows_in_prompt}\n"
-            f"Already watched movies (unique by recency, included {len(watched_movies_in_prompt)} of {len(watched_movies_unique)}): {watched_movies_in_prompt}\n"
-            "Instructions:\n"
-            "- Recommend only items the user has NOT watched. Recommendations cannot be items that are in this prompt. \n"
-            "- Base suggestions strictly on this user's data above; avoid generic/global-popularity picks unless they clearly match the user's profile.\n"
-            "- Enforce diversity: do NOT cluster around a single director/franchise/genre. Limit to max 2 items per director or franchise/universe, max 3 per genre, and ensure at least 6 distinct genres across the 40 total picks.\n"
-            "- Spread across time and regions when relevant: include a mix of decades, countries/languages, and mainstream vs. lesser-known titles—while still aligned to the user's tastes.\n"
-            "- Personalize to the user's top and recent viewing, but replace over-concentrated picks with adjacent-yet-diverse alternatives that fit the user's profile.\n"
-            "- Do not rely on any memory across requests; each call is independent.\n"
-            "Output:\n"
-            "- 20 shows and 20 movies the user would most enjoy next.\n"
-            "- 5–12 high-level categories/genres/styles inferred from the user's tastes (e.g., 'Game shows', 'British comedy', 'Sketch comedy', 'Medical Drama').\n"
-            "Requirements for each show/movie object: MUST include integer 'year' (first release year) AND 'tmdb_id' (TheMovieDB numeric id or null if unknown). May include 'director' and 'genres'.\n"
-            "Return ONLY JSON in this exact format (no prose). Example format: "
-            '{"shows": [{"title": "...", "year": 2020, "tmdb_id": 123, "director": "...", "genres": ["..."]}, ...], "movies": [{"title": "...", "year": 2020, "tmdb_id": 456, "director": "...", "genres": ["..."]}, ...], "categories": ["..."]}'
+            "Generate personalized recommendations for this user.\n"
+            f"Top shows: {top_shows}\n"
+            f"Top movies: {top_movies}\n"
+            f"Recent shows: {last10_shows}\n"
+            f"Recent movies: {last10_movies}\n"
+            f"Watched shows ({len(watched_shows_summary)}): {watched_shows_summary}\n"
+            f"Watched movies ({len(watched_movies_summary)}): {watched_movies_summary}\n"
+            "Rules:\n"
+            "- Only recommend unwatched content\n"
+            "- Max 2 per director/franchise, max 3 per genre\n"
+            "- Ensure 6+ distinct genres total\n"
+            "- Mix decades and regions\n"
+            "Output 20 shows, 20 movies with year, tmdb_id. Include 5-12 categories.\n"
+            'Format: {"shows": [{"title": "...", "year": 2020, "tmdb_id": 123}], "movies": [...], "categories": ["..."]}'
             )
         elif mode == 'custom' and mood_code:
             # Mood-based prompt generation
@@ -1469,27 +1720,27 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                 'seasonal': get_seasonal_prompt()
             }
             
+            watched_shows_summary = _summarize_watched(watched_shows_in_prompt, 30)
+            watched_movies_summary = _summarize_watched(watched_movies_in_prompt, 30)
+
             mood_instruction = mood_prompts.get(mood_code, "")
             server_context = ""
-            
+
             prompt = (
-                f"You are generating curated recommendations for a single user in mood: {selection_desc}.\n"
-                "Treat this as stateless. Do not reuse prior conversations.\n"
-                f"User's top watched shows: {top_shows}\n"
-                f"User's top watched movies: {top_movies}\n"
-                f"User's recent shows (last 10, newest first): {last10_shows}\n"
-                f"User's recent movies (last 10, newest first): {last10_movies}\n"
-                f"Already watched shows (unique by recency, included {len(watched_shows_in_prompt)} of {len(watched_shows_unique)}): {watched_shows_in_prompt}\n"
-                f"Already watched movies (unique by recency, included {len(watched_movies_in_prompt)} of {len(watched_movies_unique)}): {watched_movies_in_prompt}\n"
-                f"{server_context}"
-                "Instructions:\n"
-                f"- {mood_instruction}\n"
-                "- Produce 20 shows and 20 movies the user has NOT watched. Recommendations cannot be items that are in this prompt.\n"
-                "- Maintain quality: even if pushing boundaries, ensure recommended content is well-made and engaging.\n"
-                "- Maintain diversity: max 2 per director/franchise, max 3 per genre tag, at least 6 distinct genres overall.\n"
-                "- Replace any watched or duplicate picks with fresh alternatives that still satisfy the mood.\n"
-                "Each show/movie object MUST include integer 'year' (first release) AND 'tmdb_id' (TheMovieDB numeric id). If unknown set tmdb_id to null explicitly. Include optional 'director' and 'genres'.\n"
-                "Output strictly JSON. Return ONLY JSON in format: {\"shows\": [{\"title\":\"...\",\"year\":2022,\"tmdb_id\":123}], \"movies\": [{\"title\":\"...\",\"year\":1999,\"tmdb_id\":456}], \"categories\": [\"...\"]}"
+                f"Generate {selection_desc} recommendations.\n"
+                f"User's top shows: {top_shows}\n"
+                f"User's top movies: {top_movies}\n"
+                f"Recent shows: {last10_shows}\n"
+                f"Recent movies: {last10_movies}\n"
+                f"Watched shows ({len(watched_shows_summary)}): {watched_shows_summary}\n"
+                f"Watched movies ({len(watched_movies_summary)}): {watched_movies_summary}\n"
+                f"{mood_instruction}\n"
+                "Rules:\n"
+                "- Only recommend unwatched content\n"
+                "- Max 2 per director/franchise, max 3 per genre\n"
+                "- Ensure quality and diversity\n"
+                "Output 20 shows, 20 movies with year, tmdb_id. Include 5-12 categories.\n"
+                'Format: {"shows": [{"title": "...", "year": 2020, "tmdb_id": 123}], "movies": [...], "categories": ["..."]}'
             )
         else:
             # Custom mode prompt building (decade/genre)
@@ -1506,27 +1757,26 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             if genre_code:
                 genre_label = genre_label_map.get(genre_code, genre_code)
                 genre_clause = f" Emphasize the {genre_label} genre (or strong {genre_label} elements) while allowing adjacent subgenres for variety."
+            watched_shows_summary = _summarize_watched(watched_shows_in_prompt, 30)
+            watched_movies_summary = _summarize_watched(watched_movies_in_prompt, 30)
+
             selection_clause = selection_desc or 'Best of selection'
             prompt = (
-                f"You are generating curated recommendations for a single user in a special mode: {selection_clause}.\n"
-                "Treat this as stateless. Do not reuse prior conversations.\n"
-                f"User's top watched shows: {top_shows}\n"
-                f"User's top watched movies: {top_movies}\n"
-                f"User's recent shows (last 10, newest first): {last10_shows}\n"
-                f"User's recent movies (last 10, newest first): {last10_movies}\n"
-                f"Already watched shows (unique by recency, included {len(watched_shows_in_prompt)} of {len(watched_shows_unique)}): {watched_shows_in_prompt}\n"
-                f"Already watched movies (unique by recency, included {len(watched_movies_in_prompt)} of {len(watched_movies_unique)}): {watched_movies_in_prompt}\n"
-                "Instructions:\n"
-                "- Produce 20 shows and 20 movies the user has NOT watched. Recommendations cannot be items that are in this prompt.\n"
-                "- Weight constraints: 40% influenced by the user's historical tastes (themes, tone, pacing) and 60% by the curated selection target (decade/genre filters).\n"
-                f"-{decade_clause}{genre_clause}\n"
-                "- Favor a mix of canonical standouts and under-the-radar picks within the selection scope.\n"
-                "- Maintain diversity: max 2 per director/franchise, max 3 per genre tag you output, at least 6 distinct genres overall if feasible.\n"
-                "- Replace any watched or duplicate picks with fresh alternatives that still satisfy selection constraints.\n"
-                "- If one of decade or genre is omitted, treat the other as 'best of' and broaden the omitted dimension intelligently.\n"
-                "- If both provided, tightly align with both while still ensuring variety.\n"
-                "Each show/movie object MUST include integer 'year' (first release) AND 'tmdb_id' (TheMovieDB numeric id). If unknown set tmdb_id to null explicitly. Include optional 'director' and 'genres'.\n"
-                "Output strictly JSON. Return ONLY JSON in format: {\"shows\": [{\"title\":\"...\",\"year\":2022,\"tmdb_id\":123}], \"movies\": [{\"title\":\"...\",\"year\":1999,\"tmdb_id\":456}], \"categories\": [\"...\"]}"
+                f"Generate {selection_clause} recommendations.\n"
+                f"User's top shows: {top_shows}\n"
+                f"User's top movies: {top_movies}\n"
+                f"Recent shows: {last10_shows}\n"
+                f"Recent movies: {last10_movies}\n"
+                f"Watched shows ({len(watched_shows_summary)}): {watched_shows_summary}\n"
+                f"Watched movies ({len(watched_movies_summary)}): {watched_movies_summary}\n"
+                f"Focus: {decade_clause.strip()}{genre_clause}\n"
+                "Rules:\n"
+                "- Only recommend unwatched content\n"
+                "- 40% based on user history, 60% on selection criteria\n"
+                "- Max 2 per director/franchise, max 3 per genre\n"
+                "- Mix canonical and under-the-radar picks\n"
+                "Output 20 shows, 20 movies with year, tmdb_id. Include 5-12 categories.\n"
+                'Format: {"shows": [{"title": "...", "year": 2020, "tmdb_id": 123}], "movies": [...], "categories": ["..."]}'
             )
         gemini_recs['prompt'] = prompt
         # Log prompt with requesting IP for debugging/auditing
@@ -1543,8 +1793,11 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             pass
         if getattr(g, 'genai_sdk', None) == 'new':
             # Try a shortlist of commonly available models with the new google-genai SDK
+            gemini_recs['ai_endpoint'] = 'https://generativelanguage.googleapis.com/v1beta/models'
             # Preferred model order. Allow override via GEMINI_MODEL (.env) and prioritize requested 2.5 flash lite.
             default_order = ['gemini-2.5-flash-lite', 'gemini-2.0-flash-001']
+            print(f"DEBUG: g.AI_MODEL = {getattr(g, 'AI_MODEL', 'NOT SET')}")
+            print(f"DEBUG: g.GEMINI_MODEL = {getattr(g, 'GEMINI_MODEL', 'NOT SET')}")
             if getattr(g, 'GEMINI_MODEL', ''):
                 # Put user-specified model first if provided.
                 user_model = g.GEMINI_MODEL
@@ -1553,6 +1806,7 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             else:
                 tried_models = default_order
             gemini_recs['available_models'] = tried_models
+            print(f"DEBUG: Trying models in order: {tried_models}")
             client = getattr(g, 'genai_client', None)
             last_err = None
             if client is None:
@@ -1565,6 +1819,7 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                         gemini_recs['raw_response'] = content
                         # Capture model and usage metadata when available
                         gemini_recs['model_used'] = model_name
+                        print(f"DEBUG: Successfully used model: {model_name}")
                         usage_meta = getattr(response, 'usage_metadata', None)
                         usage = None
                         if usage_meta is not None:
@@ -1605,12 +1860,14 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                         break
                     except Exception as e:
                         last_err = e
+                        print(f"DEBUG: Model {model_name} failed: {e}")
                         gemini_recs['error'] = f"Tried model {model_name}: {e}"
                 if gemini_recs['error'] and last_err is not None:
                     # Keep the last error for context
                     gemini_recs['error'] = f"Gemini request failed: {last_err}"
         elif getattr(g, 'genai_sdk', None) == 'legacy':
             # Legacy SDK fallback
+            gemini_recs['ai_endpoint'] = 'https://generativelanguage.googleapis.com/v1beta/models'
             try:
                 model = genai.GenerativeModel('gemini-pro')
                 response = model.generate_content(prompt)
@@ -1659,7 +1916,136 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                 gemini_recs['available_models'] = ['gemini-pro']
             except Exception as e:
                 gemini_recs['error'] = f"Legacy Gemini request failed: {e}"
-    timing['gemini'] = time.time() - t4
+        elif g.AI_PROVIDER == 'mistral':
+            # Mistral AI implementation
+            gemini_recs['ai_endpoint'] = 'https://api.mistral.ai/v1/chat/completions'
+            try:
+                import requests
+                mistral_url = "https://api.mistral.ai/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {g.MISTRAL_API_KEY}",
+                    "Content-Type": "application/json"
+                }
+                
+                # Default model selection for Mistral
+                model_name = g.AI_MODEL or "mistral-small"
+                
+                data = {
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": 4000
+                }
+                
+                response = requests.post(mistral_url, headers=headers, json=data, timeout=30)
+                response.raise_for_status()
+                
+                result = response.json()
+                content = result['choices'][0]['message']['content']
+                gemini_recs['raw_response'] = content
+                gemini_recs['model_used'] = model_name
+                
+                # Extract usage information
+                usage = result.get('usage', {})
+                gemini_recs['usage'] = {
+                    'prompt_token_count': usage.get('prompt_tokens'),
+                    'candidates_token_count': usage.get('completion_tokens'),
+                    'total_token_count': usage.get('total_tokens')
+                }
+                
+                rec_json = extract_json_object(content)
+                gemini_recs['parsed_json'] = rec_json
+                if not rec_json:
+                    raise ValueError('No JSON found in Mistral response')
+                    
+                ai_recommended = pyjson.loads(rec_json)
+                cats = ai_recommended.get('categories', []) or []
+                if cats and isinstance(cats[0], dict):
+                    cats = [c.get('name') or c.get('title') or str(c) for c in cats]
+                ai_recommended['categories'] = [c for c in cats if isinstance(c, str)]
+                
+                # Record usage
+                ut = gemini_recs.get('usage') or {}
+                record_usage(
+                    model_name,
+                    ut.get('prompt_token_count'),
+                    ut.get('candidates_token_count'),
+                    ut.get('total_token_count'),
+                )
+                gemini_recs['usage_today'] = get_usage_today(model_name)
+                gemini_recs['available_models'] = [model_name]
+                
+            except Exception as e:
+                gemini_recs['error'] = f"Mistral request failed: {e}"
+                
+        elif g.AI_PROVIDER == 'openrouter':
+            # OpenRouter implementation
+            gemini_recs['ai_endpoint'] = 'https://openrouter.ai/api/v1/chat/completions'
+            try:
+                import requests
+                openrouter_url = "https://openrouter.ai/api/v1/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {g.OPENROUTER_API_KEY}",
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": request.host_url if request else "",
+                    "X-Title": "Conjurr"
+                }
+                
+                # Default model selection for OpenRouter
+                model_name = g.AI_MODEL or "anthropic/claude-3-haiku"
+                
+                data = {
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0.7,
+                    "max_tokens": 4000
+                }
+                
+                response = requests.post(openrouter_url, headers=headers, json=data, timeout=30)
+                response.raise_for_status()
+                
+                result = response.json()
+                content = result['choices'][0]['message']['content']
+                gemini_recs['raw_response'] = content
+                gemini_recs['model_used'] = model_name
+                
+                # Extract usage information
+                usage = result.get('usage', {})
+                gemini_recs['usage'] = {
+                    'prompt_token_count': usage.get('prompt_tokens'),
+                    'candidates_token_count': usage.get('completion_tokens'),
+                    'total_token_count': usage.get('total_tokens')
+                }
+                
+                rec_json = extract_json_object(content)
+                gemini_recs['parsed_json'] = rec_json
+                if not rec_json:
+                    raise ValueError('No JSON found in OpenRouter response')
+                    
+                ai_recommended = pyjson.loads(rec_json)
+                cats = ai_recommended.get('categories', []) or []
+                if cats and isinstance(cats[0], dict):
+                    cats = [c.get('name') or c.get('title') or str(c) for c in cats]
+                ai_recommended['categories'] = [c for c in cats if isinstance(c, str)]
+                
+                # Record usage
+                ut = gemini_recs.get('usage') or {}
+                record_usage(
+                    model_name,
+                    ut.get('prompt_token_count'),
+                    ut.get('candidates_token_count'),
+                    ut.get('total_token_count'),
+                )
+                gemini_recs['usage_today'] = get_usage_today(model_name)
+                gemini_recs['available_models'] = [model_name]
+                
+            except Exception as e:
+                gemini_recs['error'] = f"OpenRouter request failed: {e}"
+                
+        else:
+            gemini_recs['error'] = f"Unsupported AI provider: {g.AI_PROVIDER}"
+    
+    timing[f'{g.AI_PROVIDER}_{gemini_recs.get("model_used", "unknown")}'] = time.time() - t4
 
     # Step 6: AI parse
     t5 = time.time()
@@ -2093,7 +2479,7 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                     pre_map[title] = tmdb_id
         
         # Step 2: Check Plex availability for all items (targeted checking only)
-        plex_availability = plex.check_availability_for_items(items, media_type)
+        plex_availability = plex.check_availability_for_items(items, media_type, selected_libraries)
         
         # Step 3: Build final results
         for it in items:
@@ -2161,27 +2547,25 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
     ai_shows_unavailable = dedup([m.get('ai_title') for m in show_matches if not m.get('plex_available')])
     ai_movies_unavailable = dedup([m.get('ai_title') for m in movie_matches if not m.get('plex_available')])
 
-    # Step 8: Resolve posters for available recommendations (best-effort)
+    # Step 8: Resolve posters for available recommendations (best-effort) - BATCH OPTIMIZATION
     t7 = time.time()
-    # (Year maps already built earlier.) Include matched library titles years if not present.
-    try:
-        for m in show_matches:
-            y = m.get('ai_year'); mt = m.get('match')
-            if mt and isinstance(y, (int, float)) and mt not in ai_show_years:
-                try: ai_show_years[mt] = int(y)
-                except Exception: pass
-        for m in movie_matches:
-            y = m.get('ai_year'); mt = m.get('match')
-            if mt and isinstance(y, (int, float)) and mt not in ai_movie_years:
-                try: ai_movie_years[mt] = int(y)
-                except Exception: pass
-    except Exception:
-        pass
-    show_posters = get_posters_for_titles('show', rec_shows, ai_show_years, pre_tmdb_map=tmdb_map_shows)
-    movie_posters = get_posters_for_titles('movie', rec_movies, ai_movie_years, pre_tmdb_map=tmdb_map_movies)
-    # Also fetch posters for AI recommendations that are not in the library
-    show_posters_unavailable = get_posters_for_titles('show', ai_shows_unavailable, ai_show_years, pre_tmdb_map=tmdb_map_shows)
-    movie_posters_unavailable = get_posters_for_titles('movie', ai_movies_unavailable, ai_movie_years, pre_tmdb_map=tmdb_map_movies)
+
+    # Prepare data for batch poster fetching
+    show_title_lists = [rec_shows, ai_shows_unavailable]
+    movie_title_lists = [rec_movies, ai_movies_unavailable]
+    show_year_maps = [ai_show_years, ai_show_years]
+    movie_year_maps = [ai_movie_years, ai_movie_years]
+    show_pre_maps = [tmdb_map_shows, tmdb_map_shows]
+    movie_pre_maps = [tmdb_map_movies, tmdb_map_movies]
+
+    # Batch fetch all show posters
+    show_poster_results = get_posters_batch('show', show_title_lists, show_year_maps, show_pre_maps, max_workers=10, fetch_details=True)
+    show_posters, show_posters_unavailable = show_poster_results
+
+    # Batch fetch all movie posters
+    movie_poster_results = get_posters_batch('movie', movie_title_lists, movie_year_maps, movie_pre_maps, max_workers=10, fetch_details=True)
+    movie_posters, movie_posters_unavailable = movie_poster_results
+
     timing['posters'] = time.time() - t7
     # Build a concise source summary for UI
     def _count_sources(items):
@@ -2202,21 +2586,23 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
         'watched_set_count_recent_window': len(set(shows + movies)),
         'recent_shows': last10_shows,
         'recent_movies': last10_movies,
-        'gemini_error': gemini_recs.get('error'),
-    'genai_sdk': getattr(g, 'genai_sdk', None),
-    'gemini_model_used': gemini_recs.get('model_used'),
-    'gemini_usage': gemini_recs.get('usage'),
-        'gemini_prompt': gemini_recs.get('prompt'),
-        'gemini_raw_response': gemini_recs.get('raw_response'),
-        'gemini_parsed_json': gemini_recs.get('parsed_json'),
-    'gemini_usage_today': gemini_recs.get('usage_today'),
-    'gemini_daily_quota': None,
-    'gemini_daily_remaining': None,
-        'gemini_ai_shows': ai_shows,
-        'gemini_ai_movies': ai_movies,
-    'gemini_ai_categories': ai_categories,
-    'gemini_ai_shows_available': rec_shows,
-    'gemini_ai_movies_available': rec_movies,
+        'ai_error': gemini_recs.get('error'),
+        'ai_provider': g.AI_PROVIDER,
+        'ai_endpoint': gemini_recs.get('ai_endpoint'),
+        'ai_model_selected': g.AI_MODEL if g.AI_MODEL else 'Auto-selected',
+        'ai_model_used': gemini_recs.get('model_used'),
+        'ai_usage': gemini_recs.get('usage'),
+        'ai_prompt': gemini_recs.get('prompt'),
+        'ai_raw_response': gemini_recs.get('raw_response'),
+        'ai_parsed_json': gemini_recs.get('parsed_json'),
+        'ai_usage_today': gemini_recs.get('usage_today'),
+        'ai_daily_quota': None,
+        'ai_daily_remaining': None,
+        'ai_shows': ai_shows,
+        'ai_movies': ai_movies,
+        'ai_categories': ai_categories,
+        'ai_shows_available': rec_shows,
+        'ai_movies_available': rec_movies,
         'watched_list_prompt_counts': {
             'shows_total': len(watched_shows_unique),
             'shows_included': len(watched_shows_in_prompt),
@@ -2329,6 +2715,12 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
     result['mode'] = mode
     result['decade_code'] = decade_code
     result['genre_code'] = genre_code
+    
+    # Restore original model settings
+    if requested_model:
+        g.AI_MODEL = original_ai_model
+        g.GEMINI_MODEL = original_gemini_model
+    
     return result
 
 
@@ -2591,6 +2983,7 @@ def recommendations():
     decade = request.args.get('decade')
     genre = request.args.get('genre')
     mood = request.args.get('mood')
+    model = request.args.get('model')  # New model parameter
     format_type = request.args.get('format', 'json').lower()
     
     # User lookup - support both user_id and user parameters
@@ -2675,7 +3068,7 @@ def recommendations():
     
     # Generate recommendations
     try:
-        recs = recommend_for_user(selected_user_id, mode=mode, decade_code=decade_code, genre_code=genre_code, mood_code=mood_code)
+        recs = recommend_for_user(selected_user_id, mode=mode, decade_code=decade_code, genre_code=genre_code, mood_code=mood_code, requested_model=model)
         
         if format_type == 'html':
             # Return HTML format using the mobile template for API consumers
@@ -2739,10 +3132,12 @@ def index():
                 form_decade = request.form.get('decade') or None
                 form_genre = request.form.get('genre') or None
                 form_mood = request.form.get('mood') or None
+                form_model = request.form.get('model') or None  # New model parameter
                 # Ensure empty strings are treated as None
                 if form_decade == '': form_decade = None
                 if form_genre == '': form_genre = None
                 if form_mood == '': form_mood = None
+                if form_model == '': form_model = None
                 user_login = (request.form.get('user_login') or '').strip()
                 user_login_value = user_login
                 if not user_login:
@@ -2813,7 +3208,7 @@ def index():
                             debug_info['error'] = f'No filters selected. Received - decade: "{form_decade}", genre: "{form_genre}", mood: "{form_mood}"'
                         else:
                             refresh_user_cache_if_changed()
-                            recs = recommend_for_user(user_id, mode=form_mode, decade_code=decade_int, genre_code=(form_genre or None), mood_code=form_mood)
+                            recs = recommend_for_user(user_id, mode=form_mode, decade_code=decade_int, genre_code=(form_genre or None), mood_code=form_mood, requested_model=form_model)
                             if recs['history_count'] == 0:
                                 debug_info['note'] = 'No watch history found for this user.'
                     else:
@@ -2826,16 +3221,19 @@ def index():
                 form_decade = request.form.get('decade') or None
                 form_genre = request.form.get('genre') or None
                 form_mood = request.form.get('mood') or None
+                form_model = request.form.get('model') or None  # New model parameter
                 # Ensure empty strings are treated as None
                 if form_decade == '': form_decade = None
                 if form_genre == '': form_genre = None
                 if form_mood == '': form_mood = None
+                if form_model == '': form_model = None
             else:
                 user_id = request.args.get('user_id')
                 form_mode = (request.args.get('mode') or 'history').strip()
                 form_decade = request.args.get('decade') or None
                 form_genre = request.args.get('genre') or None
                 form_mood = request.args.get('mood') or None
+                form_model = request.args.get('model') or None
             if not user_id:
                 user_id = str(users[0].get('user_id'))
             selected_user = next((u for u in users if str(u.get('user_id')) == str(user_id)), users[0])
@@ -2852,7 +3250,7 @@ def index():
                     debug_info['error'] = f'No filters selected. Received - decade: "{form_decade}", genre: "{form_genre}", mood: "{form_mood}"'
                 else:
                     refresh_user_cache_if_changed()
-                    recs = recommend_for_user(user_id, mode=form_mode, decade_code=decade_int, genre_code=(form_genre or None), mood_code=form_mood)
+                    recs = recommend_for_user(user_id, mode=form_mode, decade_code=decade_int, genre_code=(form_genre or None), mood_code=form_mood, requested_model=form_model)
                     if recs['history_count'] == 0:
                         debug_info['note'] = 'No watch history found for this user.'
     else:
@@ -2892,38 +3290,86 @@ def index():
                 return bool(u and _re.match(r'^https?://', u))
             except Exception:
                 return False
-        _add_status('Tautulli URL', _is_url(getattr(g, 'TAUTULLI_URL', '')))
-        _add_status('Tautulli API Key', bool(getattr(g, 'TAUTULLI_API_KEY', '')))
-        db_path = getattr(g, 'TAUTULLI_DB_PATH', '')
-        _add_status('Tautulli DB (optional)', bool(db_path and os.path.exists(db_path)))
         
-        # Plex connection status
+        # Tautulli Status
+        tautulli_url = getattr(g, 'TAUTULLI_URL', '')
+        tautulli_key = getattr(g, 'TAUTULLI_API_KEY', '')
+        if tautulli_url and tautulli_key:
+            _add_status('Tautulli: Connected', True)
+        elif tautulli_url or tautulli_key:
+            _add_status('Tautulli: Partial config', False)
+        else:
+            _add_status('Tautulli: Not configured', True)  # Optional
+        
+        # Plex Status
         plex_url = getattr(g, 'PLEX_URL', '')
         plex_token = getattr(g, 'PLEX_TOKEN', '')
-        _add_status('Plex URL', _is_url(plex_url))
-        _add_status('Plex Token', bool(plex_token))
-        
-        # Test actual Plex connection if both URL and token are configured
-        plex_connection_ok = False
         if plex_url and plex_token:
+            # Test actual connection
             try:
                 plex_client = get_plex_client()
-                if plex_client:
-                    plex_connection_ok = plex_client.test_connection()
+                connection_ok = plex_client.test_connection() if plex_client else False
+                _add_status('Plex: Connected', connection_ok)
             except Exception:
-                plex_connection_ok = False
-        _add_status('Plex Connection', plex_connection_ok if (plex_url and plex_token) else True)
+                _add_status('Plex: Connection failed', False)
+        elif plex_url or plex_token:
+            _add_status('Plex: Partial config', False)
+        else:
+            _add_status('Plex: Not configured', False)
         
-        _add_status('Google Gemini API Key', bool(getattr(g, 'GOOGLE_API_KEY', '')))
-        _add_status('TMDb API Key', bool(getattr(g, 'TMDB_API_KEY', '')))
+        # AI Model Status
+        ai_provider = getattr(g, 'AI_PROVIDER', 'gemini')
+        ai_model = getattr(g, 'AI_MODEL', '')
+        provider_names = {
+            'gemini': 'Gemini',
+            'mistral': 'Mistral',
+            'openrouter': 'OpenRouter'
+        }
+        provider_name = provider_names.get(ai_provider, ai_provider.title())
+        
+        # Check if API key exists for current provider
+        api_key_exists = False
+        if ai_provider == 'gemini':
+            api_key_exists = bool(getattr(g, 'GOOGLE_API_KEY', ''))
+        elif ai_provider == 'mistral':
+            api_key_exists = bool(getattr(g, 'MISTRAL_API_KEY', ''))
+        elif ai_provider == 'openrouter':
+            api_key_exists = bool(getattr(g, 'OPENROUTER_API_KEY', ''))
+        
+        model_display = ai_model if ai_model else 'Auto-selected'
+        status_text = f'{provider_name}: {model_display}'
+        if not api_key_exists:
+            status_text += ' (No API key)'
+        _add_status(status_text, api_key_exists)
+        
+        # TMDb Status
+        tmdb_key = getattr(g, 'TMDB_API_KEY', '')
+        if tmdb_key:
+            _add_status('TMDb: Configured', True)
+        else:
+            _add_status('TMDb: Not configured', True)  # Optional
+        
+        # Overseerr Status
         overseerr_url = getattr(g, 'OVERSEERR_URL', '')
-        _add_status('Overseerr URL (optional)', _is_url(overseerr_url) if overseerr_url else True)
         overseerr_key = getattr(g, 'OVERSEERR_API_KEY', '')
-        _add_status('Overseerr API Key (optional)', True if not overseerr_url else bool(overseerr_key))
-        quotas = getattr(g, 'GEMINI_DAILY_QUOTAS', {})
-        _add_status('Gemini Daily Quotas (optional)', isinstance(quotas, dict))
-        # Library inclusion filter summary
-    # Library filter removed (status entry omitted)
+        if overseerr_url:
+            if overseerr_key:
+                _add_status('Overseerr: Connected', True)
+            else:
+                _add_status('Overseerr: URL only', True)
+        else:
+            _add_status('Overseerr: Not configured', True)  # Optional
+        
+        # Selected Libraries Status
+        selected_libraries = getattr(g, 'SELECTED_LIBRARIES', [])
+        if selected_libraries:
+            selected_libraries = [str(lib) for lib in selected_libraries]
+            if len(selected_libraries) == 1:
+                _add_status(f'Libraries: 1 selected', True)
+            else:
+                _add_status(f'Libraries: {len(selected_libraries)} selected', True)
+        else:
+            _add_status('Libraries: All available', True)
     # Build category -> Overseerr discover links using Overseerr keyword ids when possible
     category_links = []
     if recs and recs.get('ai_categories') and getattr(g, 'OVERSEERR_URL', ''):
@@ -2964,6 +3410,8 @@ def index():
     decade_selected=(recs.get('decade_code') if recs else (int(form_decade) if form_decade and form_decade.isdigit() else None)),
     genre_selected=(recs.get('genre_code') if recs else form_genre),
     mood_selected=(recs.get('mood_code') if recs else form_mood),
+    model_selected=form_model,  # Add selected model
+    ai_provider=getattr(g, 'AI_PROVIDER', 'gemini'),  # Add AI provider
     moods=MOOD_LABEL_MAP,
     selection_desc=(recs.get('selection_desc') if recs else None),
     user_login_value=user_login_value,
@@ -3048,14 +3496,18 @@ def settings_page():
             'TAUTULLI_URL': request.form.get('TAUTULLI_URL', '').strip(),
             'TAUTULLI_API_KEY': request.form.get('TAUTULLI_API_KEY', '').strip(),
             'GOOGLE_API_KEY': request.form.get('GOOGLE_API_KEY', '').strip(),
+            'MISTRAL_API_KEY': request.form.get('MISTRAL_API_KEY', '').strip(),
+            'OPENROUTER_API_KEY': request.form.get('OPENROUTER_API_KEY', '').strip(),
             'TAUTULLI_DB_PATH': request.form.get('TAUTULLI_DB_PATH', '').strip(),
-            'GEMINI_DAILY_QUOTAS': request.form.get('GEMINI_DAILY_QUOTAS', '').strip(),
+            'AI_PROVIDER': request.form.get('AI_PROVIDER', 'gemini').strip(),
+            'AI_MODEL': request.form.get('AI_MODEL', '').strip(),
+            'AI_DAILY_QUOTAS': request.form.get('AI_DAILY_QUOTAS', '').strip(),
             'TMDB_API_KEY': request.form.get('TMDB_API_KEY', '').strip(),
             'OVERSEERR_URL': request.form.get('OVERSEERR_URL', '').strip(),
             'OVERSEERR_API_KEY': request.form.get('OVERSEERR_API_KEY', '').strip(),
-            'GEMINI_MODEL': request.form.get('GEMINI_MODEL', '').strip(),
             'PLEX_URL': request.form.get('PLEX_URL', '').strip(),
             'PLEX_TOKEN': request.form.get('PLEX_TOKEN', '').strip(),
+            'SELECTED_LIBRARIES': request.form.getlist('SELECTED_LIBRARIES'),  # Get list of selected library keys
         }
         # Collect chosen library IDs from multi-select checkboxes
     # Library inclusion filter removed
@@ -3079,8 +3531,12 @@ def settings_page():
             errors.append('Plex URL must start with http:// or https://')
         if not is_nonempty(new_settings['PLEX_TOKEN']):
             errors.append('Plex Token is required')
-        if not is_nonempty(new_settings['GOOGLE_API_KEY']):
-            errors.append('Google Gemini API Key is required')
+        if not is_nonempty(new_settings['GOOGLE_API_KEY']) and new_settings['AI_PROVIDER'] == 'gemini':
+            errors.append('Google Gemini API Key is required when using Gemini provider')
+        if not is_nonempty(new_settings['MISTRAL_API_KEY']) and new_settings['AI_PROVIDER'] == 'mistral':
+            errors.append('Mistral API Key is required when using Mistral provider')
+        if not is_nonempty(new_settings['OPENROUTER_API_KEY']) and new_settings['AI_PROVIDER'] == 'openrouter':
+            errors.append('OpenRouter API Key is required when using OpenRouter provider')
         # Tautulli settings are now optional since we use Plex directly
         if new_settings.get('TAUTULLI_URL') and not is_valid_url(new_settings['TAUTULLI_URL']):
             errors.append('Tautulli URL must start with http:// or https://')
@@ -3105,20 +3561,20 @@ def settings_page():
             if not ok_db:
                 errors.append(f"Tautulli DB path invalid: {err_db}")
         # Validate quotas JSON if provided
-        if not errors and new_settings.get('GEMINI_DAILY_QUOTAS'):
+        if not errors and new_settings.get('AI_DAILY_QUOTAS'):
             try:
                 import json as _json
-                parsed = _json.loads(new_settings['GEMINI_DAILY_QUOTAS'])
+                parsed = _json.loads(new_settings['AI_DAILY_QUOTAS'])
                 if not isinstance(parsed, dict):
-                    errors.append('Gemini daily quotas must be a JSON object mapping model -> integer calls per day')
+                    errors.append('AI daily quotas must be a JSON object mapping model -> integer calls per day')
                 else:
                     # Ensure values are numbers
                     for k, v in parsed.items():
                         if not isinstance(v, (int, float)):
-                            errors.append('Gemini daily quotas values must be numbers')
+                            errors.append('AI daily quotas values must be numbers')
                             break
             except Exception as e:
-                errors.append(f'Gemini daily quotas invalid JSON: {e}')
+                errors.append(f'AI daily quotas invalid JSON: {e}')
         
         if errors:
             message = ' '.join(errors)
@@ -3126,7 +3582,7 @@ def settings_page():
         else:
             ok, err = save_settings(new_settings)
             if ok:
-                message = '\u2705 Settings validated - Redirecting...'
+                message = '✅ Settings Saved Successfully! Redirecting now....'
                 message_type = 'success'
                 # Show message for 2 seconds, then redirect
                 return render_template('settings.html', settings=new_settings, missing=[], message=message, message_type=message_type, redirect_main=True)
@@ -3153,10 +3609,24 @@ def settings_page():
     _feat('Overseerr Auth Features', bool(settings.get('OVERSEERR_URL') and settings.get('OVERSEERR_API_KEY')), 'Future advanced Overseerr features (requests/status).')
     _feat('Full Watch History (Tautulli DB)', bool(settings.get('TAUTULLI_DB_PATH') and os.path.exists(settings.get('TAUTULLI_DB_PATH'))), 'Enables full watch history enrichment.')
     _feat('Enhanced Watch History (Tautulli API)', bool(settings.get('TAUTULLI_URL') and settings.get('TAUTULLI_API_KEY')), 'Access to user viewing patterns and preferences.')
-    _feat('Daily Gemini Quotas Enforcement', bool(settings.get('GEMINI_DAILY_QUOTAS')), 'Limits model calls per day based on JSON map.')
-    _feat('Preferred Gemini Model Override', bool(settings.get('GEMINI_MODEL')), 'Forces first-attempt model when generating recommendations.')
+    _feat('Daily AI Quotas Enforcement', bool(settings.get('AI_DAILY_QUOTAS')), 'Limits model calls per day based on JSON map.')
+    _feat('Preferred AI Model Override', bool(settings.get('AI_MODEL')), 'Forces specific model when generating recommendations.')
     # Removed Library Inclusion Filter & Plex Direct Library Source features
     # Fetch libraries for inclusion UI
+    
+    # Fetch available libraries for selection
+    libraries = []
+    selected_libraries = settings.get('SELECTED_LIBRARIES', [])
+    if isinstance(selected_libraries, str):
+        selected_libraries = [selected_libraries] if selected_libraries else []
+    
+    # Try to fetch libraries if Plex is configured
+    if settings.get('PLEX_URL') and settings.get('PLEX_TOKEN'):
+        try:
+            plex_client = PlexClient(settings['PLEX_URL'], settings['PLEX_TOKEN'])
+            libraries = plex_client.get_libraries()
+        except Exception as e:
+            print(f"Error fetching Plex libraries: {e}")
     
     # Check if admin
     is_admin = _is_request_localhost(request) and not getattr(g, 'USER_MODE', False)
@@ -3168,7 +3638,13 @@ def settings_page():
                          message_type=message_type, 
                          redirect_main=False, 
                          feature_summary=feature_summary,
-                         is_admin=is_admin)
+                         is_admin=is_admin,
+                         libraries=libraries,
+                         selected_libraries=selected_libraries)
+
+# Save TMDb cache on shutdown
+import atexit
+atexit.register(_save_tmdb_cache)
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=2665, debug=True)

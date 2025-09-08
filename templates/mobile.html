@@ -140,8 +140,8 @@
             <div>
                 <div class="title">Conjurr knows all</div>
                 {% if version %}<div class="version">{{ version }}</div>{% endif %}
-                {% if recs and recs.debug and recs.debug.gemini_model_used %}
-                    <div class="version" style="font-size:0.85em; color:#cfc088;">Model: {{ recs.debug.gemini_model_used }}</div>
+                {% if recs and recs.debug and recs.debug.ai_model_used %}
+                    <div class="version" style="font-size:0.85em; color:#cfc088;">Model: {{ recs.debug.ai_model_used }}</div>
                 {% endif %}
             </div>
         </div>

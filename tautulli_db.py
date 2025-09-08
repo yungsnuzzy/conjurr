@@ -64,7 +64,7 @@ def db_get_users(db_path: str) -> List[Dict]:
     return [u for u in users if u.get('is_active', True)]
 
 
-def _select_history(conn: sqlite3.Connection, user_id: str, after: Optional[int] = None, limit: Optional[int] = None):
+def _select_history(conn: sqlite3.Connection, user_id: str, after: Optional[int] = None, limit: Optional[int] = None, selected_libraries: Optional[List[str]] = None):
     sh_cols = _get_columns(conn, 'session_history')
     sm_cols = _get_columns(conn, 'session_history_metadata')
     # Required columns
@@ -93,26 +93,37 @@ def _select_history(conn: sqlite3.Connection, user_id: str, after: Optional[int]
         'sh.media_type as media_type',
         f'{title_expr} as title',
         (f'{gp_expr} as grandparent_title' if gp_expr else 'NULL as grandparent_title'),
-        f'{date_expr} as dt'
+        f'{date_expr} as dt',
+        ('sh.section_id as section_id' if 'section_id' in sh_cols else 'NULL as section_id')
     ]
     sql = (
         f"SELECT {', '.join(select_fields)} "
         "FROM session_history sh "
         "LEFT JOIN session_history_metadata sm ON sm.rating_key = sh.rating_key "
         "WHERE sh.user_id = ? "
-        f"ORDER BY {date_expr} DESC"
     )
+    
+    # Add library filter if selected_libraries is provided and section_id is available
+    params = [user_id]
+    if selected_libraries and 'section_id' in sh_cols:
+        placeholders = ','.join('?' for _ in selected_libraries)
+        sql += f"AND sh.section_id IN ({placeholders}) "
+        params.extend(selected_libraries)
+    
+    sql += f"ORDER BY {date_expr} DESC"
+    
     if limit:
         sql += f" LIMIT {int(limit)}"
     cur = conn.cursor()
-    cur.execute(sql, [user_id])
+    cur.execute(sql, params)
     rows = cur.fetchall()
     out = []
-    for media_type, title, grandparent_title, dt in rows:
+    for media_type, title, grandparent_title, dt, section_id in rows:
         rec = {
             'media_type': media_type,
             'title': title,
             'grandparent_title': grandparent_title,
+            'section_id': section_id if section_id is not None else None,
         }
         # Normalize dt to float when possible
         try:
@@ -131,18 +142,18 @@ def _select_history(conn: sqlite3.Connection, user_id: str, after: Optional[int]
     return out
 
 
-def db_get_user_watch_history(db_path: str, user_id: str, after: Optional[int] = None, limit: Optional[int] = 1000):
+def db_get_user_watch_history(db_path: str, user_id: str, after: Optional[int] = None, limit: Optional[int] = 1000, selected_libraries: Optional[List[str]] = None):
     conn = _connect(db_path)
     try:
-        return _select_history(conn, user_id, after=after, limit=limit)
+        return _select_history(conn, user_id, after=after, limit=limit, selected_libraries=selected_libraries)
     finally:
         conn.close()
 
 
-def db_get_user_watch_history_all(db_path: str, user_id: str):
+def db_get_user_watch_history_all(db_path: str, user_id: str, selected_libraries: Optional[List[str]] = None):
     conn = _connect(db_path)
     try:
-        return _select_history(conn, user_id, after=None, limit=None)
+        return _select_history(conn, user_id, after=None, limit=None, selected_libraries=selected_libraries)
     finally:
         conn.close()
 
