@@ -291,6 +291,7 @@
                             {% endfor %}
                         </select>
                     </div>
+                    {% if not user_mode %}
                     <div>
                         <label style="font-size:0.9em;display:block;margin-bottom:4px;" for="model">AI Model</label>
                         <select name="model" id="model" style="padding:6px 8px;min-width:160px;">
@@ -315,6 +316,7 @@
                             {% endif %}
                         </select>
                     </div>
+                    {% endif %}
                 </div>
                 <div id="custom-error-user" style="color:#ff8888;font-size:0.85em;margin-top:4px;">{% if debug_info and debug_info.error and (mode=='custom') and not recs %}{{ debug_info.error }}{% endif %}</div>
                 <div class="cta-row" style="margin-top:2px;">
@@ -815,6 +817,7 @@
             <div>All shows in library: {{ recs.debug.all_shows_count }}</div>
             <div>All movies in library: {{ recs.debug.all_movies_count }}</div>
             <div>Watched set count: {{ recs.debug.watched_set_count }}</div>
+            <div>Selected libraries: {{ recs.debug.selected_libraries|join(', ') if recs.debug.selected_libraries else 'All libraries' }}</div>
             <div>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} AI Shows: {{ recs.debug.ai_shows|join(', ') }}</div>
             <div>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} AI Movies: {{ recs.debug.ai_movies|join(', ') }}</div>
             <div>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} AI Shows Available in Library: {{ recs.debug.ai_shows_available|join(', ') }}</div>
@@ -832,6 +835,9 @@
             {% endif %}
             <div style="margin-top:10px;">
                 <b>{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} Debug:</b>
+                <div><b>API Endpoint:</b> {{ recs.debug.ai_endpoint or 'Not set' }}</div>
+                <div><b>Model Selected:</b> {{ recs.debug.ai_model_selected or 'Not set' }}</div>
+                <div><b>Model Used:</b> {{ recs.debug.ai_model_used or 'Not set' }}</div>
                 <div><b>Prompt:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.ai_prompt }}</pre></div>
                 <div><b>Raw Response:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.ai_raw_response }}</pre></div>
                 <div><b>Parsed JSON:</b> <pre style="white-space:pre-wrap;max-height:100px;overflow:auto;">{{ recs.debug.ai_parsed_json }}</pre></div>

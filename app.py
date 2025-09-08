@@ -29,7 +29,7 @@ import pickle
 import hashlib
 
 # App version (displayed in UI)
-VERSION = "v3.9 beta (The 'super model' update)"
+VERSION = "v4.0 (The 'bedrock' update)"
 
 # PyInstaller compatibility
 def get_base_path():
@@ -752,7 +752,7 @@ def get_user_watch_history(user_id, selected_libraries=None):
             return db_get_user_watch_history(g.TAUTULLI_DB_PATH, user_id, after=one_year_ago, limit=1000, selected_libraries=selected_libraries)
         except Exception:
             pass
-    return get_user_watch_history_api(user_id)
+    return get_user_watch_history_api(user_id, selected_libraries)
 
 # Helper to fetch the user's entire watch history from Tautulli (paginated)
 def get_user_watch_history_all(user_id, selected_libraries=None):
@@ -1492,7 +1492,7 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
         print(f"DEBUG: recommend_for_user called user_id={user_id} username={debug_username} mode={mode} mood={mood_code} model={display_model}")
 
     # Step 1: Recent (API) history strictly for top/recent calculations (stateless, up-to-date)
-    hist_api = get_user_watch_history_api(user_id)
+    hist_api = get_user_watch_history_api(user_id, selected_libraries)
     timing['user_history'] = time.time() - t0
 
     # Step 2: Top watched and recents derived ONLY from API subset per requirement
@@ -3118,6 +3118,7 @@ def index():
     form_decade = None
     form_genre = None
     form_mood = None
+    form_model = None
     user_login_value = None
     # Library status UI removed; automatic caching handled in get_all_library_items. We still
     # expose a simple loading overlay if cache is cold (detected lazily in template JS via data attribute).
