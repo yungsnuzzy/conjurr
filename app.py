@@ -22,13 +22,12 @@ import time
 import threading
 import re
 import json
-import schedule
 from datetime import datetime, date, time as datetime_time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import sys
 
 # App version (displayed in UI)
-VERSION = "v3.7.5 beta (The 'cash money' update)"
+VERSION = "v3.8 beta (The 'tap to pay [cache-less]' update)"
 
 # PyInstaller compatibility
 def get_base_path():
@@ -50,88 +49,7 @@ app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 # User Mode (1 or 0): when enabled, hide settings/debug/library status and require Plex email/username prompt
 USER_MODE = 0
 
-# Plex cache management
-PLEX_CACHE_STATUS = {
-    'is_building': False,
-    'last_updated': None,
-    'next_update': None,
-    'progress': {'current': 0, 'total': 0, 'message': ''},
-    'libraries_cached': {},
-    'total_items_with_tmdb': 0
-}
-PLEX_CACHE_LOCK = threading.Lock()
-
-# Temporary storage for cache data during startup
-_cached_library_data = None
-
-def save_plex_cache():
-    """Save Plex cache data to disk for persistence across restarts."""
-    try:
-        cache_data = {
-            'status': PLEX_CACHE_STATUS.copy(),
-            'library_content_cache': {},
-            'libraries_cache': None
-        }
-        
-        # Get cache from current plex client if available
-        global plex_client
-        if plex_client:
-            cache_data['library_content_cache'] = plex_client._library_content_cache.copy()
-            cache_data['libraries_cache'] = plex_client._libraries_cache
-        
-        # Save to JSON file (directory already ensured by get_cache_directory)
-        with open(CACHE_FILE_PATH, 'w', encoding='utf-8') as f:
-            json.dump(cache_data, f, indent=2, default=str)
-        
-        print(f"✓ Plex cache saved to {CACHE_FILE_PATH}")
-        return True
-    except Exception as e:
-        print(f"Error saving Plex cache: {e}")
-        return False
-
-def load_plex_cache():
-    """Load Plex cache data from disk to restore after restart."""
-    try:
-        if not os.path.exists(CACHE_FILE_PATH):
-            print("No cached Plex data found")
-            return False
-        
-        with open(CACHE_FILE_PATH, 'r', encoding='utf-8') as f:
-            cache_data = json.load(f)
-        
-        # Restore global cache status
-        global PLEX_CACHE_STATUS
-        if 'status' in cache_data:
-            # Update status but ensure is_building is False (in case app crashed during build)
-            status = cache_data['status']
-            status['is_building'] = False
-            PLEX_CACHE_STATUS.update(status)
-        
-        # Store cache data to restore to plex client later
-        global _cached_library_data
-        _cached_library_data = {
-            'library_content_cache': cache_data.get('library_content_cache', {}),
-            'libraries_cache': cache_data.get('libraries_cache')
-        }
-        
-        print(f"✓ Plex cache loaded from {CACHE_FILE_PATH}")
-        if PLEX_CACHE_STATUS.get('last_updated'):
-            print(f"  Last updated: {PLEX_CACHE_STATUS['last_updated']}")
-            print(f"  Libraries cached: {len(PLEX_CACHE_STATUS.get('libraries_cached', {}))}")
-            print(f"  Items with TMDb: {PLEX_CACHE_STATUS.get('total_items_with_tmdb', 0)}")
-        return True
-    except Exception as e:
-        print(f"Error loading Plex cache: {e}")
-        return False
-
-def restore_cache_to_plex_client():
-    """Restore cached data to plex client once it's available."""
-    global _cached_library_data, plex_client
-    if plex_client and _cached_library_data:
-        plex_client._library_content_cache = _cached_library_data.get('library_content_cache', {})
-        plex_client._libraries_cache = _cached_library_data.get('libraries_cache')
-        _cached_library_data = None  # Clear temporary storage
-        print("✓ Cache data restored to Plex client")
+# Global mood mapping for templates
 
 # Global mood mapping for templates
 MOOD_LABEL_MAP = {
@@ -234,71 +152,6 @@ def _is_request_localhost(req: request) -> bool:
     except Exception:
         return False
 
-# Cache persistence - use appropriate directory for both dev and compiled .exe
-def get_cache_directory():
-    """Get appropriate cache directory for both development and compiled .exe"""
-    try:
-        # Use existing runtime directory logic for consistency
-        cache_dir = os.path.join(get_runtime_dir(), 'data')
-        
-        # Ensure directory exists
-        os.makedirs(cache_dir, exist_ok=True)
-        return cache_dir
-    except Exception as e:
-        # Fallback to appdata directory if runtime dir fails
-        try:
-            cache_dir = os.path.join(get_appdata_dir(), 'data')
-            os.makedirs(cache_dir, exist_ok=True)
-            print(f"Warning: Using appdata cache directory {cache_dir} due to error: {e}")
-            return cache_dir
-        except Exception as e2:
-            # Ultimate fallback to current directory
-            fallback_dir = os.path.join(os.getcwd(), 'data')
-            os.makedirs(fallback_dir, exist_ok=True)
-            print(f"Warning: Using fallback cache directory {fallback_dir} due to errors: {e}, {e2}")
-            return fallback_dir
-
-# Initialize cache file path
-CACHE_FILE_PATH = os.path.join(get_cache_directory(), 'plex_cache.json')
-
-# Log cache directory for debugging
-print(f"Cache directory: {get_cache_directory()}")
-print(f"Cache file path: {CACHE_FILE_PATH}")
-if is_frozen():
-    print("Running as compiled .exe")
-else:
-    print("Running as Python script")
-
-# Decorator to check cache status and lock website during cache building
-def cache_lock_check(f):
-    """Decorator that checks if cache is building and locks non-admin users out."""
-    from functools import wraps
-    
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        # Skip cache lock for certain endpoints
-        endpoint = request.endpoint
-        if endpoint in ['plex_cache_status', 'rebuild_plex_cache', 'clear_plex_cache', 'toggle_user_mode', 'settings_page']:
-            return f(*args, **kwargs)
-        
-        # Check cache status
-        global PLEX_CACHE_STATUS
-        with PLEX_CACHE_LOCK:
-            cache_status = PLEX_CACHE_STATUS.copy()
-        
-        # If cache is building, check if user is admin
-        if cache_status['is_building']:
-            is_admin = _is_request_localhost(request) and not getattr(g, 'USER_MODE', False)
-            if not is_admin:
-                # Redirect non-admin users to cache building page
-                return render_template('cache_building.html',
-                                     progress=cache_status['progress'],
-                                     cache_status=cache_status)
-        
-        return f(*args, **kwargs)
-    
-    return decorated_function
-
 # Localhost-only endpoint to toggle USER_MODE by updating .env
 @app.post('/toggle_user_mode')
 def toggle_user_mode():
@@ -324,62 +177,6 @@ def favicon():
     return send_from_directory(os.path.join(app.static_folder, 'APP ICONS'), '32.ico', mimetype='image/x-icon')
 
 # Debug route to test if Flask is working
-@app.route('/debug_plex_guids')
-def debug_plex_guids():
-    """Debug endpoint to inspect Plex GUID structure and test enhanced extraction"""
-    try:
-        plex = get_plex_client()
-        if plex is None:
-            return jsonify({
-                "success": False,
-                "error": "Plex not configured (missing URL or token)"
-            })
-        
-        # Test connection
-        connection_ok = plex.test_connection()
-        if not connection_ok:
-            return jsonify({
-                "success": False,
-                "error": "Cannot connect to Plex server"
-            })
-        
-        # Get libraries and test enhanced GUID extraction
-        libraries = plex.get_libraries()
-        
-        # Test enhanced GUID extraction on first movie library
-        test_results = {}
-        for library in libraries:
-            if library['type'] == 'movie':
-                print(f"DEBUG: Testing enhanced GUID extraction on library: {library['title']}")
-                
-                # Clear cache to force fresh scan
-                cache_key = f"{library['key']}_movie_guids"
-                if cache_key in plex._library_content_cache:
-                    del plex._library_content_cache[cache_key]
-                
-                # Test the enhanced extraction
-                guid_data = plex.get_library_content_with_guids(library['key'], 'movie')
-                
-                test_results[library['title']] = {
-                    'type': 'movie',
-                    'total_items_with_tmdb': len(guid_data),
-                    'sample_items': dict(list(guid_data.items())[:10])  # First 10 items
-                }
-                break  # Only test one library to avoid long response
-        
-        return jsonify({
-            "success": True,
-            "libraries": libraries,
-            "enhanced_guid_test": test_results,
-            "message": "Check console output for detailed debug information"
-        })
-        
-    except Exception as e:
-        return jsonify({
-            "success": False,
-            "error": str(e)
-        })
-
 @app.route('/debug')
 def debug():
     return f"""
@@ -419,7 +216,6 @@ def get_settings():
         'PLEX_URL': 'http://localhost:32400',
         'PLEX_TOKEN': '',
         'TAUTULLI_CACHE_REBUILD_TIME': '03:00',
-        'PLEX_CACHE_REBUILD_TIME': '03:00',
     }
     # Suggested default DB path (Windows)
     try:
@@ -492,7 +288,6 @@ def reload_settings():
     g.GEMINI_MODEL = settings.get('GEMINI_MODEL', '').strip()
     g.PLEX_URL = (settings.get('PLEX_URL', '') or '').rstrip('/')
     g.PLEX_TOKEN = settings.get('PLEX_TOKEN', '').strip()
-    g.PLEX_CACHE_REBUILD_TIME = settings.get('PLEX_CACHE_REBUILD_TIME', '03:00')
     # Optional library inclusion filter: comma-separated section_ids (ints). Empty => include all for that type.
     raw_libs = ''  # library inclusion filter deprecated
     include_ids = set()
@@ -545,7 +340,6 @@ class PlexClient:
             'Accept': 'application/json'
         }
         self._libraries_cache = None
-        self._library_content_cache = {}
         
     def test_connection(self):
         """Test Plex server connection"""
@@ -578,456 +372,109 @@ class PlexClient:
             print(f"Error getting Plex libraries: {e}")
         return []
     
-    def get_library_content_titles(self, library_key, library_type):
-        """Get all titles from a specific library (legacy method for title-based matching)"""
-        cache_key = f"{library_key}_{library_type}"
-        if cache_key in self._library_content_cache:
-            return self._library_content_cache[cache_key]
+    def check_availability_for_items(self, items, media_type):
+        """Check availability for specific items only using targeted Plex API searches"""
+        if not items:
+            return {}
             
-        titles = set()
-        try:
-            # Get all items from this library
-            url = f"{self.base_url}/library/sections/{library_key}/all"
-            r = requests.get(url, headers=self.headers, timeout=30)
-            
-            if r.status_code == 200:
-                data = r.json()
-                for item in data.get('MediaContainer', {}).get('Metadata', []):
-                    title = item.get('title', '').strip()
-                    if title:
-                        # Use the new title variations function
-                        variations = get_title_variations(title)
-                        titles.update(variations)
-                            
-        except Exception as e:
-            print(f"Error getting library content for {library_key}: {e}")
-        
-        self._library_content_cache[cache_key] = titles
-        return titles
-    
-    def get_library_content_with_guids(self, library_key, library_type):
-        """Get library content with GUID information for TMDb ID matching"""
-        cache_key = f"{library_key}_{library_type}_guids"
-        if cache_key in self._library_content_cache:
-            return self._library_content_cache[cache_key]
-            
-        content_data = {}  # {tmdb_id: title}
-        items_without_tmdb = []
-        items_needing_lookup = []  # Items with plex:// GUIDs that need detailed metadata
-        
-        try:
-            # Get all items from this library
-            url = f"{self.base_url}/library/sections/{library_key}/all"
-            r = requests.get(url, headers=self.headers, timeout=30)
-            
-            if r.status_code == 200:
-                data = r.json()
-                total_items = 0
-                items_with_tmdb = 0
-                debug_sample_count = 0
-                
-                print(f"DEBUG: Starting library scan for {library_type} library...")
-                
-                for item in data.get('MediaContainer', {}).get('Metadata', []):
-                    title = item.get('title', '').strip()
-                    if not title:
-                        continue
-                    
-                    total_items += 1
-                    
-                    # Enable debug sampling for first 3 items to see GUID structure
-                    debug_sample = debug_sample_count < 3
-                    if debug_sample:
-                        debug_sample_count += 1
-                        print(f"\n=== DEBUG SAMPLE {debug_sample_count}: '{title}' ===")
-                    
-                    # Try to extract TMDb ID from basic GUID info first
-                    tmdb_id = self._extract_tmdb_id_from_item(item, debug_sample=debug_sample)
-                    if tmdb_id:
-                        content_data[tmdb_id] = title
-                        items_with_tmdb += 1
-                        print(f"DEBUG: Found TMDb ID {tmdb_id} for '{title}'")
-                    else:
-                        items_without_tmdb.append(title)
-                        
-                        # Check if this item has a plex:// GUID that might need detailed lookup
-                        guids = item.get('Guid', [])
-                        if not isinstance(guids, list):
-                            guids = []
-                        main_guid = item.get('guid', '')
-                        if main_guid:
-                            guids.append({'id': main_guid})
-                            
-                        for guid_obj in guids:
-                            guid_id = guid_obj.get('id', '') if isinstance(guid_obj, dict) else str(guid_obj)
-                            if 'plex://movie/' in guid_id or 'plex://show/' in guid_id:
-                                items_needing_lookup.append(item)
-                                break
-                
-                # Batch process items that need detailed metadata lookup (limit for performance)
-                if items_needing_lookup:
-                    lookup_limit = min(50, len(items_needing_lookup))  # Limit to prevent timeout
-                    print(f"DEBUG: Processing {lookup_limit}/{len(items_needing_lookup)} items needing detailed metadata lookup...")
-                    
-                    for i, item in enumerate(items_needing_lookup[:lookup_limit]):
-                        if i > 0 and i % 10 == 0:
-                            print(f"DEBUG: Processed {i}/{lookup_limit} detailed lookups...")
-                            
-                        title = item.get('title', '').strip()
-                        rating_key = item.get('ratingKey')
-                        
-                        if rating_key:
-                            try:
-                                detail_url = f"{self.base_url}/library/metadata/{rating_key}"
-                                detail_resp = requests.get(detail_url, headers=self.headers, timeout=3)
-                                
-                                if detail_resp.status_code == 200:
-                                    detail_data = detail_resp.json()
-                                    metadata_item = detail_data.get('MediaContainer', {}).get('Metadata', [])
-                                    
-                                    if metadata_item and len(metadata_item) > 0:
-                                        detailed_item = metadata_item[0]
-                                        
-                                        # Check for TMDb ID in detailed metadata
-                                        detailed_guids = detailed_item.get('Guid', [])
-                                        if not isinstance(detailed_guids, list):
-                                            detailed_guids = []
-                                        
-                                        for detailed_guid in detailed_guids:
-                                            detailed_guid_id = detailed_guid.get('id', '') if isinstance(detailed_guid, dict) else str(detailed_guid)
-                                            
-                                            tmdb_id = None
-                                            if 'tmdb://' in detailed_guid_id:
-                                                try:
-                                                    tmdb_id = int(detailed_guid_id.split('tmdb://')[1])
-                                                except (ValueError, IndexError):
-                                                    continue
-                                            elif 'themoviedb://' in detailed_guid_id:
-                                                try:
-                                                    tmdb_id = int(detailed_guid_id.split('themoviedb://')[1])
-                                                except (ValueError, IndexError):
-                                                    continue
-                                            elif 'com.plexapp.agents.themoviedb://' in detailed_guid_id:
-                                                try:
-                                                    parts = detailed_guid_id.split('com.plexapp.agents.themoviedb://')[1]
-                                                    tmdb_id_str = parts.split('?')[0]
-                                                    tmdb_id = int(tmdb_id_str)
-                                                except (ValueError, IndexError):
-                                                    continue
-                                            
-                                            if tmdb_id:
-                                                content_data[tmdb_id] = title
-                                                items_with_tmdb += 1
-                                                print(f"DEBUG: Found TMDb ID {tmdb_id} for '{title}' via detailed lookup")
-                                                if title in items_without_tmdb:
-                                                    items_without_tmdb.remove(title)
-                                                break
-                                                
-                            except Exception as e:
-                                print(f"DEBUG: Error in detailed lookup for '{title}': {e}")
-                                continue
-                
-                print(f"DEBUG: Library scan complete - {items_with_tmdb}/{total_items} items have TMDb IDs")
-                if items_without_tmdb and len(items_without_tmdb) <= 10:
-                    print(f"DEBUG: Items without TMDb IDs: {items_without_tmdb}")
-                elif items_without_tmdb:
-                    print(f"DEBUG: {len(items_without_tmdb)} items without TMDb IDs (showing first 5): {items_without_tmdb[:5]}")
-                            
-        except Exception as e:
-            print(f"Error getting library content with GUIDs for {library_key}: {e}")
-        
-        self._library_content_cache[cache_key] = content_data
-        return content_data
-    
-    def _extract_tmdb_id_from_item(self, item, debug_sample=False):
-        """Extract TMDb ID from a Plex library item's GUID information"""
-        try:
-            title = item.get('title', 'Unknown')
-            
-            # Check multiple GUID sources
-            guids = item.get('Guid', [])
-            if not isinstance(guids, list):
-                guids = []
-            
-            # Also check the main 'guid' field (sometimes it's a string)
-            main_guid = item.get('guid', '')
-            if main_guid:
-                guids.append({'id': main_guid})
-            
-            # Debug: Show actual GUID structure for first few items
-            if debug_sample:
-                print(f"DEBUG GUID: '{title}' has GUIDs: {guids}")
-                print(f"DEBUG GUID: Raw item keys: {list(item.keys())}")
-            
-            for guid_obj in guids:
-                guid_id = guid_obj.get('id', '') if isinstance(guid_obj, dict) else str(guid_obj)
-                
-                if debug_sample:
-                    print(f"DEBUG GUID: Processing GUID ID: '{guid_id}'")
-                
-                # Look for direct TMDb GUID patterns first
-                if 'tmdb://' in guid_id:
-                    # Direct TMDb reference: tmdb://12345
-                    try:
-                        tmdb_id = int(guid_id.split('tmdb://')[1])
-                        if debug_sample:
-                            print(f"DEBUG GUID: Found TMDb ID {tmdb_id} via tmdb:// pattern")
-                        return tmdb_id
-                    except (ValueError, IndexError):
-                        continue
-                elif 'themoviedb://' in guid_id:
-                    # Alternative TMDb format: themoviedb://12345
-                    try:
-                        tmdb_id = int(guid_id.split('themoviedb://')[1])
-                        if debug_sample:
-                            print(f"DEBUG GUID: Found TMDb ID {tmdb_id} via themoviedb:// pattern")
-                        return tmdb_id
-                    except (ValueError, IndexError):
-                        continue
-                        
-                # Handle Plex internal GUIDs by fetching detailed metadata
-                elif 'plex://movie/' in guid_id or 'plex://show/' in guid_id:
-                    if debug_sample:
-                        print(f"DEBUG GUID: Found Plex internal GUID, fetching detailed metadata...")
-                    
-                    try:
-                        rating_key = item.get('ratingKey')
-                        if rating_key:
-                            # Fetch detailed metadata for this item
-                            detail_url = f"{self.base_url}/library/metadata/{rating_key}"
-                            detail_resp = requests.get(detail_url, headers=self.headers, timeout=5)
-                            
-                            if detail_resp.status_code == 200:
-                                detail_data = detail_resp.json()
-                                metadata_item = detail_data.get('MediaContainer', {}).get('Metadata', [])
-                                
-                                if metadata_item and len(metadata_item) > 0:
-                                    detailed_item = metadata_item[0]
-                                    
-                                    # Check for TMDb ID in the detailed metadata's GUIDs
-                                    detailed_guids = detailed_item.get('Guid', [])
-                                    if not isinstance(detailed_guids, list):
-                                        detailed_guids = []
-                                    
-                                    if debug_sample:
-                                        print(f"DEBUG GUID: Detailed metadata GUIDs: {detailed_guids}")
-                                    
-                                    for detailed_guid in detailed_guids:
-                                        detailed_guid_id = detailed_guid.get('id', '') if isinstance(detailed_guid, dict) else str(detailed_guid)
-                                        
-                                        if 'tmdb://' in detailed_guid_id:
-                                            try:
-                                                tmdb_id = int(detailed_guid_id.split('tmdb://')[1])
-                                                if debug_sample:
-                                                    print(f"DEBUG GUID: Found TMDb ID {tmdb_id} in detailed metadata")
-                                                return tmdb_id
-                                            except (ValueError, IndexError):
-                                                continue
-                                        elif 'themoviedb://' in detailed_guid_id:
-                                            try:
-                                                tmdb_id = int(detailed_guid_id.split('themoviedb://')[1])
-                                                if debug_sample:
-                                                    print(f"DEBUG GUID: Found TMDb ID {tmdb_id} in detailed metadata (themoviedb format)")
-                                                return tmdb_id
-                                            except (ValueError, IndexError):
-                                                continue
-                                        elif 'com.plexapp.agents.themoviedb://' in detailed_guid_id:
-                                            # Handle Plex's TMDb agent format: com.plexapp.agents.themoviedb://12345?lang=en
-                                            try:
-                                                parts = detailed_guid_id.split('com.plexapp.agents.themoviedb://')[1]
-                                                tmdb_id_str = parts.split('?')[0]  # Remove language parameter
-                                                tmdb_id = int(tmdb_id_str)
-                                                if debug_sample:
-                                                    print(f"DEBUG GUID: Found TMDb ID {tmdb_id} via Plex TMDb agent format")
-                                                return tmdb_id
-                                            except (ValueError, IndexError):
-                                                continue
-                                    
-                                    if debug_sample:
-                                        print(f"DEBUG GUID: No TMDb ID found in detailed metadata")
-                            else:
-                                if debug_sample:
-                                    print(f"DEBUG GUID: Failed to fetch detailed metadata (status: {detail_resp.status_code})")
-                        else:
-                            if debug_sample:
-                                print(f"DEBUG GUID: No ratingKey found for detailed metadata lookup")
-                    except Exception as e:
-                        if debug_sample:
-                            print(f"DEBUG GUID: Error fetching detailed metadata: {e}")
-                        continue
-                        
-                elif 'imdb://' in guid_id or 'tvdb://' in guid_id:
-                    if debug_sample:
-                        print(f"DEBUG GUID: Found non-TMDb GUID: {guid_id}")
-            
-            if debug_sample and not guids:
-                print(f"DEBUG GUID: '{title}' has NO GUIDs at all")
-            
-            return None
-            
-        except Exception as e:
-            print(f"Error extracting TMDb ID from item '{title}': {e}")
-            return None
-    
-    def build_availability_cache_background(self):
-        """Build complete cache in background with progress tracking"""
-        global PLEX_CACHE_STATUS
-        
-        with PLEX_CACHE_LOCK:
-            if PLEX_CACHE_STATUS['is_building']:
-                print("DEBUG: Cache build already in progress, skipping")
-                return
-            PLEX_CACHE_STATUS['is_building'] = True
-            PLEX_CACHE_STATUS['progress'] = {'current': 0, 'total': 0, 'message': 'Starting cache build...'}
-        
-        try:
-            print("DEBUG: Starting background Plex cache build...")
-            start_time = time.time()
-            
-            libraries = self.get_libraries()
-            movie_show_libraries = [lib for lib in libraries if lib['type'] in ['movie', 'show']]
-            
-            with PLEX_CACHE_LOCK:
-                PLEX_CACHE_STATUS['progress']['total'] = len(movie_show_libraries)
-                PLEX_CACHE_STATUS['progress']['message'] = f'Processing {len(movie_show_libraries)} libraries...'
-            
-            total_items_with_tmdb = 0
-            libraries_cached = {}
-            
-            for i, library in enumerate(movie_show_libraries):
-                library_key = library['key']
-                library_type = library['type']
-                library_name = library['title']
-                
-                with PLEX_CACHE_LOCK:
-                    PLEX_CACHE_STATUS['progress']['current'] = i + 1
-                    PLEX_CACHE_STATUS['progress']['message'] = f'Scanning library: {library_name}'
-                
-                print(f"DEBUG: Background scanning library {i+1}/{len(movie_show_libraries)}: {library_name}")
-                
-                # Force fresh scan (no cache)
-                cache_key = f"{library_key}_{library_type}_guids"
-                if cache_key in self._library_content_cache:
-                    del self._library_content_cache[cache_key]
-                
-                # Scan library with enhanced GUID extraction
-                guid_data = self.get_library_content_with_guids(library_key, library_type)
-                
-                libraries_cached[library_name] = {
-                    'type': library_type,
-                    'items_with_tmdb': len(guid_data)
-                }
-                total_items_with_tmdb += len(guid_data)
-                
-                print(f"DEBUG: Library '{library_name}' cached: {len(guid_data)} items with TMDb IDs")
-                
-                # Periodic save every 3 libraries to protect against crashes
-                if (i + 1) % 3 == 0:
-                    try:
-                        with PLEX_CACHE_LOCK:
-                            PLEX_CACHE_STATUS['libraries_cached'] = libraries_cached.copy()
-                            PLEX_CACHE_STATUS['total_items_with_tmdb'] = total_items_with_tmdb
-                        save_plex_cache()
-                        print(f"DEBUG: Intermediate cache save completed (libraries: {i + 1}/{len(movie_show_libraries)})")
-                    except Exception as save_e:
-                        print(f"Warning: Intermediate cache save failed: {save_e}")
-            
-            # Update cache status
-            with PLEX_CACHE_LOCK:
-                PLEX_CACHE_STATUS['is_building'] = False
-                PLEX_CACHE_STATUS['last_updated'] = datetime.now().isoformat()
-                PLEX_CACHE_STATUS['libraries_cached'] = libraries_cached
-                PLEX_CACHE_STATUS['total_items_with_tmdb'] = total_items_with_tmdb
-                PLEX_CACHE_STATUS['progress']['message'] = 'Cache build complete'
-            
-            # Save cache to disk for persistence
-            save_plex_cache()
-            
-            elapsed = time.time() - start_time
-            print(f"DEBUG: Background cache build complete! {total_items_with_tmdb} items with TMDb IDs found in {elapsed:.1f}s")
-            
-        except Exception as e:
-            print(f"ERROR: Background cache build failed: {e}")
-            with PLEX_CACHE_LOCK:
-                PLEX_CACHE_STATUS['is_building'] = False
-                PLEX_CACHE_STATUS['progress']['message'] = f'Cache build failed: {str(e)}'
-    
-    def batch_check_availability(self, items, media_type):
-        """Batch check availability for multiple items using TMDb ID matching"""
-        global PLEX_CACHE_STATUS
-        
-        # Check if cache is currently building
-        with PLEX_CACHE_LOCK:
-            if PLEX_CACHE_STATUS['is_building']:
-                print("DEBUG: Plex cache is currently building, using title-only matching")
-                # Fall back to title-only matching during cache build
-                return self._batch_check_availability_title_only(items, media_type)
-        
-        # Get all available TMDb IDs for this media type
+        # Get libraries for this media type
         libraries = self.get_libraries()
-        available_tmdb_ids = {}  # {tmdb_id: title}
-        available_titles = set()  # Fallback for title-based matching
+        relevant_libraries = [lib for lib in libraries if lib['type'] == media_type]
         
-        for library in libraries:
-            if library['type'] == media_type:
-                # Primary: Get content with GUID/TMDb ID information
-                guid_content = self.get_library_content_with_guids(library['key'], media_type)
-                available_tmdb_ids.update(guid_content)
-                
-                # Fallback: Get title variations for items without TMDb IDs
-                title_content = self.get_library_content_titles(library['key'], media_type)
-                available_titles.update(title_content)
+        if not relevant_libraries:
+            print(f"DEBUG: No {media_type} libraries found")
+            return {item.get('title') if isinstance(item, dict) else item: False for item in items}
         
-        # Check each item against available content
+        print(f"DEBUG: Checking availability for {len(items)} {media_type} items using targeted searches (no library scanning)")
+        
         results = {}
+        
         for item in items:
             title = item.get('title') if isinstance(item, dict) else item
             if not title:
                 continue
                 
+            tmdb_id = item.get('tmdb_id') if isinstance(item, dict) else None
             is_available = False
             
-            # Method 1: TMDb ID matching (most accurate)
-            tmdb_id = None
-            if isinstance(item, dict):
-                tmdb_id = item.get('tmdb_id')
-            
-            if tmdb_id and tmdb_id in available_tmdb_ids:
-                is_available = True
-                # print(f"DEBUG: TMDb ID match found - '{title}' (TMDb ID: {tmdb_id}) matches '{available_tmdb_ids[tmdb_id]}'")
-            
-            # Method 2: Title variation matching (fallback)
-            if not is_available:
-                ai_variations = get_title_variations(title)
-                is_available = bool(ai_variations & available_titles)
+            # Check each library for this specific item using targeted searches
+            for library in relevant_libraries:
                 if is_available:
-                    print(f"DEBUG: Title match found - '{title}' matched via title variations")
+                    break
+                    
+                # Try TMDb ID search first (most accurate and fastest)
+                if tmdb_id:
+                    is_available = self._check_availability_by_tmdb_id(library['key'], media_type, tmdb_id, title)
+                
+                # Fallback to title search if TMDb ID didn't work
+                if not is_available:
+                    is_available = self._check_availability_by_title(library['key'], media_type, title)
             
             results[title] = is_available
+            if is_available:
+                print(f"DEBUG: ✓ Found '{title}' in Plex")
+            else:
+                print(f"DEBUG: ✗ '{title}' not found in Plex")
         
         return results
     
-    def _batch_check_availability_title_only(self, items, media_type):
-        """Fallback method using only title matching (used during cache builds)"""
-        libraries = self.get_libraries()
-        available_titles = set()
+    def _check_availability_by_tmdb_id(self, library_key, media_type, tmdb_id, title):
+        """Check if specific item is available by TMDb ID using targeted search"""
+        try:
+            # Use Plex search API to look for this specific TMDb ID
+            search_url = f"{self.base_url}/library/sections/{library_key}/all"
+            params = {
+                'X-Plex-Token': self.token,
+                'guid': f'tmdb://{tmdb_id}'
+            }
+            
+            response = requests.get(search_url, params=params, timeout=10)
+            if response.status_code == 200:
+                from xml.etree import ElementTree as ET
+                root = ET.fromstring(response.content)
+                
+                # Check if any items were found
+                items = root.findall('.//Video') if media_type == 'movie' else root.findall('.//Directory')
+                if items:
+                    plex_title = items[0].get('title', 'Unknown')
+                    print(f"DEBUG: TMDb ID match found - '{title}' (TMDb ID: {tmdb_id}) matches '{plex_title}'")
+                    return True
+                    
+        except Exception as e:
+            print(f"DEBUG: Error checking TMDb ID for '{title}': {e}")
         
-        for library in libraries:
-            if library['type'] == media_type:
-                titles = self.get_library_content_titles(library['key'], media_type)
-                available_titles.update(titles)
+        return False
+    
+    def _check_availability_by_title(self, library_key, media_type, title):
+        """Check if specific item is available by title using targeted search"""
+        try:
+            # Generate title variations for search
+            ai_variations = get_title_variations(title)
+            
+            # Try searching for each variation
+            for search_title in ai_variations:
+                search_url = f"{self.base_url}/library/sections/{library_key}/all"
+                params = {
+                    'X-Plex-Token': self.token,
+                    'title': search_title
+                }
+                
+                response = requests.get(search_url, params=params, timeout=10)
+                if response.status_code == 200:
+                    from xml.etree import ElementTree as ET
+                    root = ET.fromstring(response.content)
+                    
+                    # Check if any items were found
+                    items = root.findall('.//Video') if media_type == 'movie' else root.findall('.//Directory')
+                    if items:
+                        plex_title = items[0].get('title', 'Unknown')
+                        print(f"DEBUG: Title match found - '{title}' matched '{plex_title}' via search term '{search_title}'")
+                        return True
+                        
+        except Exception as e:
+            print(f"DEBUG: Error checking title for '{title}': {e}")
         
-        results = {}
-        for item in items:
-            title = item.get('title') if isinstance(item, dict) else item
-            if title:
-                ai_variations = get_title_variations(title)
-                is_available = bool(ai_variations & available_titles)
-                if is_available:
-                    print(f"DEBUG: Title match found - '{title}' matched via title variations (cache building)")
-                results[title] = is_available
-        
-        return results
+        return False
 
 
 # Global Plex client instance
@@ -1045,103 +492,8 @@ def get_plex_client():
         
     if plex_client is None or plex_client.base_url != plex_url.rstrip('/') or plex_client.token != plex_token:
         plex_client = PlexClient(plex_url, plex_token)
-        # Restore cached data if available
-        restore_cache_to_plex_client()
         
     return plex_client
-
-def schedule_plex_cache_rebuild():
-    """Schedule daily Plex cache rebuild"""
-    try:
-        settings = get_settings()
-        rebuild_time = settings.get('PLEX_CACHE_REBUILD_TIME', '03:00')
-        
-        # Clear existing schedules
-        schedule.clear('plex_cache')
-        
-        # Schedule new rebuild time
-        schedule.every().day.at(rebuild_time).do(rebuild_plex_cache_job).tag('plex_cache')
-        print(f"DEBUG: Scheduled Plex cache rebuild for {rebuild_time}")
-        
-    except Exception as e:
-        print(f"ERROR: Failed to schedule Plex cache rebuild: {e}")
-
-def rebuild_plex_cache_job():
-    """Job function for scheduled cache rebuilds"""
-    print("DEBUG: Starting scheduled Plex cache rebuild...")
-    plex = get_plex_client()
-    if plex:
-        threading.Thread(target=plex.build_availability_cache_background, daemon=True).start()
-    else:
-        print("DEBUG: Plex not configured, skipping cache rebuild")
-
-# Start scheduler thread
-def start_scheduler():
-    """Start the background scheduler"""
-    def run_scheduler():
-        while True:
-            schedule.run_pending()
-            time.sleep(60)  # Check every minute
-    
-    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-    scheduler_thread.start()
-    print("DEBUG: Scheduler started")
-
-@app.route('/clear_plex_cache')
-def clear_plex_cache():
-    """Clear Plex client cache for debugging"""
-    global plex_client, PLEX_CACHE_STATUS
-    if plex_client:
-        plex_client._libraries_cache = None
-        plex_client._library_content_cache = {}
-        
-        with PLEX_CACHE_LOCK:
-            PLEX_CACHE_STATUS['last_updated'] = None
-            PLEX_CACHE_STATUS['libraries_cached'] = {}
-            PLEX_CACHE_STATUS['total_items_with_tmdb'] = 0
-        
-        # Delete cache file
-        try:
-            if os.path.exists(CACHE_FILE_PATH):
-                os.remove(CACHE_FILE_PATH)
-                print("✓ Cache file deleted")
-        except Exception as e:
-            print(f"Warning: Could not delete cache file: {e}")
-        
-        return jsonify({"success": True, "message": "Plex cache cleared"})
-    else:
-        return jsonify({"success": False, "message": "No Plex client to clear"})
-
-@app.route('/rebuild_plex_cache')
-def rebuild_plex_cache():
-    """Manually trigger Plex cache rebuild (admin only)"""
-    if not _is_request_localhost(request):
-        return abort(403)
-    
-    plex = get_plex_client()
-    if not plex:
-        return jsonify({"success": False, "message": "Plex not configured"})
-    
-    global PLEX_CACHE_STATUS
-    with PLEX_CACHE_LOCK:
-        if PLEX_CACHE_STATUS['is_building']:
-            return jsonify({"success": False, "message": "Cache rebuild already in progress"})
-    
-    # Start background rebuild
-    threading.Thread(target=plex.build_availability_cache_background, daemon=True).start()
-    return jsonify({"success": True, "message": "Cache rebuild started"})
-
-@app.route('/plex_cache_status')
-def plex_cache_status():
-    """Get current Plex cache status"""
-    global PLEX_CACHE_STATUS
-    with PLEX_CACHE_LOCK:
-        status = PLEX_CACHE_STATUS.copy()
-    
-    return jsonify({
-        "success": True,
-        "cache_status": status
-    })
 
 
 _USER_CACHE = { 'users': None, 'hash': None, 'ts': 0 }
@@ -2740,8 +2092,8 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                 if tmdb_id:
                     pre_map[title] = tmdb_id
         
-        # Step 2: Batch check Plex availability for all items (now with TMDb IDs)
-        plex_availability = plex.batch_check_availability(items, media_type)
+        # Step 2: Check Plex availability for all items (targeted checking only)
+        plex_availability = plex.check_availability_for_items(items, media_type)
         
         # Step 3: Build final results
         for it in items:
@@ -3347,7 +2699,6 @@ def recommendations():
 
 
 @app.route('/', methods=['GET', 'POST'])
-@cache_lock_check
 def index():
     global TAUTULLI_URL, TAUTULLI_API_KEY, GOOGLE_API_KEY, settings
     # Check for missing settings
@@ -3362,28 +2713,6 @@ def index():
         # In user mode, settings are hidden; don't redirect to settings.
         if not getattr(g, 'USER_MODE', False):
             return redirect(url_for('settings_page'))
-    
-    # Get Plex cache status for template
-    global PLEX_CACHE_STATUS
-    plex_cache_info = None
-    with PLEX_CACHE_LOCK:
-        plex_cache_info = PLEX_CACHE_STATUS.copy()
-    
-    # If cache has never been built and Plex is configured, start building it
-    if not plex_cache_info['last_updated'] and g.PLEX_URL and g.PLEX_TOKEN:
-        plex = get_plex_client()
-        if plex:
-            print("DEBUG: Starting initial Plex cache build...")
-            threading.Thread(target=plex.build_availability_cache_background, daemon=True).start()
-    
-    # Check if we should show admin loading message for cache building
-    show_loading = False
-    loading_message = None
-    if plex_cache_info['is_building']:
-        is_admin = _is_request_localhost(request) and not getattr(g, 'USER_MODE', False)
-        if is_admin:
-            show_loading = True
-            loading_message = f"Building Plex library cache... {plex_cache_info['progress']['message']} (Admin mode: site unlocked)"
     
     users = get_cached_users()
     user_id = None
@@ -3622,8 +2951,6 @@ def index():
         recs=recs,
         debug_info=debug_info,
     user_login_error=user_login_error,
-        show_loading=show_loading,
-        loading_message=loading_message,
     library_status=None,
     show_status_only=None,
     movie_status_only=None,
@@ -3642,7 +2969,6 @@ def index():
     user_login_value=user_login_value,
     user_config_status=user_config_status,
     category_links=category_links,
-    plex_cache_status=plex_cache_info,
     overseerr_url=getattr(g, 'OVERSEERR_URL', '')
     )
 
@@ -3730,7 +3056,6 @@ def settings_page():
             'GEMINI_MODEL': request.form.get('GEMINI_MODEL', '').strip(),
             'PLEX_URL': request.form.get('PLEX_URL', '').strip(),
             'PLEX_TOKEN': request.form.get('PLEX_TOKEN', '').strip(),
-            'PLEX_CACHE_REBUILD_TIME': request.form.get('PLEX_CACHE_REBUILD_TIME', '').strip(),
         }
         # Collect chosen library IDs from multi-select checkboxes
     # Library inclusion filter removed
@@ -3743,7 +3068,9 @@ def settings_page():
         if file and getattr(file, 'filename', ''):
             from werkzeug.utils import secure_filename
             safe_name = secure_filename(file.filename) or 'Tautulli.db'
-            upload_dir = get_cache_directory()  # Use consistent data directory
+            upload_dir = 'data'  # Use simple data directory
+            if not os.path.exists(upload_dir):
+                os.makedirs(upload_dir)
             saved_upload_path = os.path.join(upload_dir, safe_name)
             file.save(saved_upload_path)
             new_settings['TAUTULLI_DB_PATH'] = saved_upload_path
@@ -3793,12 +3120,6 @@ def settings_page():
             except Exception as e:
                 errors.append(f'Gemini daily quotas invalid JSON: {e}')
         
-        # Validate cache rebuild time format if provided
-        if not errors and new_settings.get('PLEX_CACHE_REBUILD_TIME'):
-            import re
-            time_pattern = r'^([01]?[0-9]|2[0-3]):[0-5][0-9]$'
-            if not re.match(time_pattern, new_settings['PLEX_CACHE_REBUILD_TIME']):
-                errors.append('Plex cache rebuild time must be in HH:MM format (24-hour), e.g. 03:00')
         if errors:
             message = ' '.join(errors)
             message_type = 'error'
@@ -3837,20 +3158,8 @@ def settings_page():
     # Removed Library Inclusion Filter & Plex Direct Library Source features
     # Fetch libraries for inclusion UI
     
-    # Get cache status for admin users
+    # Check if admin
     is_admin = _is_request_localhost(request) and not getattr(g, 'USER_MODE', False)
-    plex_cache_status = None
-    if is_admin:
-        global PLEX_CACHE_STATUS
-        plex_cache_status = PLEX_CACHE_STATUS.copy()
-        # Format last_updated for display
-        if plex_cache_status.get('last_updated'):
-            try:
-                from datetime import datetime
-                dt = datetime.fromisoformat(plex_cache_status['last_updated'])
-                plex_cache_status['last_updated'] = dt.strftime('%Y-%m-%d %H:%M')
-            except:
-                pass
     
     return render_template('settings.html', 
                          settings=settings, 
@@ -3859,58 +3168,7 @@ def settings_page():
                          message_type=message_type, 
                          redirect_main=False, 
                          feature_summary=feature_summary,
-                         is_admin=is_admin,
-                         plex_cache_status=plex_cache_status)
-
-# Initialize scheduler and cache on startup
-def initialize_cache_system():
-    """Initialize the cache scheduling system and trigger initial cache build if needed."""
-    try:
-        # First, try to load existing cache from disk
-        print("Loading Plex cache from disk...")
-        cache_loaded = load_plex_cache()
-        
-        # Schedule daily cache rebuild
-        schedule_plex_cache_rebuild()
-        print("✓ Scheduled daily Plex cache rebuild")
-        
-        # Check if we need an initial cache build
-        global PLEX_CACHE_STATUS
-        if not PLEX_CACHE_STATUS.get('last_updated'):
-            if cache_loaded:
-                print("Cache file was corrupted or incomplete, starting fresh build...")
-            else:
-                print("No cache found, starting initial build...")
-            # Start initial cache build in background
-            import threading
-            thread = threading.Thread(target=rebuild_plex_cache_job, daemon=True)
-            thread.start()
-        else:
-            print(f"✓ Cache already exists (last updated: {PLEX_CACHE_STATUS.get('last_updated')})")
-            
-    except Exception as e:
-        print(f"Error initializing cache system: {e}")
-
-# Initialize cache system when app starts
-initialize_cache_system()
-
-# Start background scheduler
-def run_scheduler():
-    """Run the background scheduler for cache rebuilds."""
-    import time
-    while True:
-        try:
-            schedule.run_pending()
-            time.sleep(60)  # Check every minute
-        except Exception as e:
-            print(f"Scheduler error: {e}")
-            time.sleep(60)
-
-# Start scheduler in background thread
-import threading
-scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
-scheduler_thread.start()
-print("✓ Background scheduler started")
+                         is_admin=is_admin)
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=2665, debug=True)

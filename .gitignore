@@ -7,5 +7,4 @@ env/
 __pycache__/
 *.pyc
 @package/
-*.rc
-plex_cache.json
+*.rcfd

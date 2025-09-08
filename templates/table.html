@@ -208,21 +208,12 @@
         <label for="toggle-debug">Show Debug Info</label>
     </div>
     {% endif %}
-    {% if show_loading %}
-    <div id="loading-overlay" data-library-building="true" style="display: flex;">
-        <div class="loading-inner" style="background:#000;border:1px solid #222;padding:26px 30px;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,0.7),0 0 12px rgba(0,0,0,0.6) inset;">
-            <img id="loading-gif" src="/static/libraryload.gif" alt="Loading library...">
-            <span style="margin-top:14px;">{{ loading_message if loading_message else "Loading library data..." }}</span>
-        </div>
-    </div>
-    {% else %}
     <div id="loading-overlay" data-library-building="false" style="display: none;">
         <div class="loading-inner" style="background:#000;border:1px solid #222;padding:26px 30px;border-radius:18px;box-shadow:0 4px 28px rgba(0,0,0,0.7),0 0 12px rgba(0,0,0,0.6) inset;">
             <img id="loading-gif" src="/static/load.gif" alt="Loading...">
             <span id="loading-text" style="margin-top:14px;">Loading Conjurr's wisdom...</span>
         </div>
     </div>
-    {% endif %}
     <div class="conjurr-banner">
         <img src="/static/load.gif" alt="Genie">
         <div>
