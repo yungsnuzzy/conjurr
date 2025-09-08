@@ -1,8 +1,30 @@
 import os
 import sqlite3
 import datetime
+import sys
 
-DB_PATH = os.path.join(os.path.dirname(__file__), 'usage.db')
+def get_data_directory():
+    """Get appropriate data directory for both development and compiled .exe"""
+    try:
+        # For compiled .exe, use directory next to executable
+        if getattr(sys, 'frozen', False):
+            exe_dir = os.path.dirname(sys.executable)
+            data_dir = os.path.join(exe_dir, 'data')
+        else:
+            # Running as script
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            data_dir = os.path.join(script_dir, 'data')
+        
+        # Ensure directory exists
+        os.makedirs(data_dir, exist_ok=True)
+        return data_dir
+    except Exception:
+        # Fallback to current directory
+        fallback_dir = os.path.join(os.getcwd(), 'data')
+        os.makedirs(fallback_dir, exist_ok=True)
+        return fallback_dir
+
+DB_PATH = os.path.join(get_data_directory(), 'usage.db')
 
 
 def init_usage_db():

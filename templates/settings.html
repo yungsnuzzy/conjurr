@@ -67,7 +67,35 @@
                 <input type="password" id="PLEX_TOKEN" name="PLEX_TOKEN" value="{{ settings.PLEX_TOKEN }}" placeholder="Your Plex authentication token" required>
                 <div class="hint">X-Plex-Token for authenticating with Plex API. <a href="https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/" target="_blank">How to find your token</a></div>
             </div>
+            <div class="field">
+                <label for="PLEX_CACHE_REBUILD_TIME">Cache Rebuild Time <span class="inline-badge">Optional</span></label>
+                <input type="text" id="PLEX_CACHE_REBUILD_TIME" name="PLEX_CACHE_REBUILD_TIME" value="{{ settings.PLEX_CACHE_REBUILD_TIME }}" placeholder="03:00">
+                <div class="hint">Daily cache rebuild time in HH:MM format (24-hour). Example: <code>03:00</code> for 3 AM.</div>
+            </div>
         </div>
+        
+        {% if is_admin and plex_cache_status %}
+        <div style="margin-top:20px; padding:16px; background:#1a1a1a; border-radius:10px; border:1px solid #2c2c2c;">
+            <div class="group-title" style="margin-top:0;">Plex Cache Status</div>
+            {% if plex_cache_status.is_building %}
+                <div class="pill no" style="margin-top:8px;">
+                    Cache Building <small>{{ plex_cache_status.progress.current }}/{{ plex_cache_status.progress.total }}</small>
+                </div>
+                <div style="font-size:0.7rem; margin-top:6px; color:#d0c396;">
+                    {{ plex_cache_status.progress.message }}
+                </div>
+            {% else %}
+                <div class="pill ok" style="margin-top:8px;">
+                    Cache Ready <small>Last: {{ plex_cache_status.last_updated or 'Never' }}</small>
+                </div>
+                {% if is_admin %}
+                    <button type="button" onclick="rebuildCache()" style="margin-top:12px; margin-bottom:0; padding:8px 16px; font-size:0.8rem;">
+                        Rebuild Cache Now
+                    </button>
+                {% endif %}
+            {% endif %}
+        </div>
+        {% endif %}
 
         <h3>Core Tautulli Connection <span class="inline-badge">Optional</span></h3>
         <div class="grid">
@@ -181,6 +209,42 @@
             secureField('TMDB_API_KEY');
             secureField('OVERSEERR_API_KEY');
         })();
+        
+        // Cache rebuild functionality
+        function rebuildCache() {
+            if (!confirm('This will rebuild the entire Plex cache. This may take several minutes. Continue?')) {
+                return;
+            }
+            
+            var btn = event.target;
+            var originalText = btn.textContent;
+            btn.textContent = 'Rebuilding...';
+            btn.disabled = true;
+            
+            fetch('/rebuild_plex_cache', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Cache rebuild started successfully!');
+                    // Refresh page to show updated status
+                    setTimeout(() => window.location.reload(), 1000);
+                } else {
+                    alert('Error starting cache rebuild: ' + (data.error || 'Unknown error'));
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }
+            })
+            .catch(error => {
+                alert('Error: ' + error.message);
+                btn.textContent = originalText;
+                btn.disabled = false;
+            });
+        }
     </script>
 </body>
 </html>
