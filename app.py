@@ -193,11 +193,25 @@ def test_plex():
         # Get library info
         libraries = plex.get_libraries()
         
+        # Test GUID scanning on first movie/show library
+        guid_sample = {}
+        for library in libraries:
+            if library['type'] in ['movie', 'show']:
+                print(f"Testing GUID scanning on library: {library['title']}")
+                guid_data = plex.get_library_content_with_guids(library['key'], library['type'])
+                guid_sample[library['title']] = {
+                    'type': library['type'],
+                    'total_items_with_tmdb': len(guid_data),
+                    'sample_items': dict(list(guid_data.items())[:5])  # First 5 items
+                }
+                break  # Only test one library to avoid long response
+        
         return jsonify({
             "success": True,
             "connection": "OK",
             "libraries": libraries,
-            "library_count": len(libraries)
+            "library_count": len(libraries),
+            "guid_test": guid_sample
         })
         
     except Exception as e:
@@ -403,7 +417,7 @@ class PlexClient:
         return []
     
     def get_library_content_titles(self, library_key, library_type):
-        """Get all titles from a specific library"""
+        """Get all titles from a specific library (legacy method for title-based matching)"""
         cache_key = f"{library_key}_{library_type}"
         if cache_key in self._library_content_cache:
             return self._library_content_cache[cache_key]
@@ -429,6 +443,91 @@ class PlexClient:
         self._library_content_cache[cache_key] = titles
         return titles
     
+    def get_library_content_with_guids(self, library_key, library_type):
+        """Get library content with GUID information for TMDb ID matching"""
+        cache_key = f"{library_key}_{library_type}_guids"
+        if cache_key in self._library_content_cache:
+            return self._library_content_cache[cache_key]
+            
+        content_data = {}  # {tmdb_id: title}
+        items_without_tmdb = []
+        try:
+            # Get all items from this library
+            url = f"{self.base_url}/library/sections/{library_key}/all"
+            r = requests.get(url, headers=self.headers, timeout=30)
+            
+            if r.status_code == 200:
+                data = r.json()
+                total_items = 0
+                items_with_tmdb = 0
+                
+                for item in data.get('MediaContainer', {}).get('Metadata', []):
+                    title = item.get('title', '').strip()
+                    if not title:
+                        continue
+                    
+                    total_items += 1
+                    
+                    # Extract TMDb ID from GUIDs
+                    tmdb_id = self._extract_tmdb_id_from_item(item)
+                    if tmdb_id:
+                        content_data[tmdb_id] = title
+                        items_with_tmdb += 1
+                        print(f"DEBUG: Found TMDb ID {tmdb_id} for '{title}'")
+                    else:
+                        items_without_tmdb.append(title)
+                
+                print(f"DEBUG: Library scan complete - {items_with_tmdb}/{total_items} items have TMDb IDs")
+                if items_without_tmdb and len(items_without_tmdb) <= 10:
+                    print(f"DEBUG: Items without TMDb IDs: {items_without_tmdb}")
+                elif items_without_tmdb:
+                    print(f"DEBUG: {len(items_without_tmdb)} items without TMDb IDs (showing first 5): {items_without_tmdb[:5]}")
+                            
+        except Exception as e:
+            print(f"Error getting library content with GUIDs for {library_key}: {e}")
+        
+        self._library_content_cache[cache_key] = content_data
+        return content_data
+    
+    def _extract_tmdb_id_from_item(self, item):
+        """Extract TMDb ID from a Plex library item's GUID information"""
+        try:
+            # Check multiple GUID sources
+            guids = item.get('Guid', [])
+            if not isinstance(guids, list):
+                guids = []
+            
+            # Also check the main 'guid' field (sometimes it's a string)
+            main_guid = item.get('guid', '')
+            if main_guid:
+                guids.append({'id': main_guid})
+            
+            for guid_obj in guids:
+                guid_id = guid_obj.get('id', '') if isinstance(guid_obj, dict) else str(guid_obj)
+                
+                # Look for TMDb GUID patterns
+                # Examples: "tmdb://12345", "plex://movie/5d776b59ad5437001f79c6f8?lang=en", etc.
+                if 'tmdb://' in guid_id:
+                    # Direct TMDb reference: tmdb://12345
+                    try:
+                        return int(guid_id.split('tmdb://')[1])
+                    except (ValueError, IndexError):
+                        continue
+                elif 'themoviedb://' in guid_id:
+                    # Alternative TMDb format: themoviedb://12345
+                    try:
+                        return int(guid_id.split('themoviedb://')[1])
+                    except (ValueError, IndexError):
+                        continue
+            
+            # If no direct TMDb GUID found, we might need to make an additional API call
+            # to get the item's detailed metadata which could include TMDb info
+            return None
+            
+        except Exception as e:
+            print(f"Error extracting TMDb ID from item: {e}")
+            return None
+    
     def build_availability_cache(self):
         """Build a complete cache of all available titles"""
         all_titles = {'movie': set(), 'show': set()}
@@ -446,29 +545,48 @@ class PlexClient:
         return all_titles
     
     def batch_check_availability(self, items, media_type):
-        """Batch check availability for multiple items"""
-        # Get all available titles for this media type
+        """Batch check availability for multiple items using TMDb ID matching"""
+        # Get all available TMDb IDs for this media type
         libraries = self.get_libraries()
-        available_titles = set()
+        available_tmdb_ids = {}  # {tmdb_id: title}
+        available_titles = set()  # Fallback for title-based matching
         
         for library in libraries:
             if library['type'] == media_type:
-                titles = self.get_library_content_titles(library['key'], media_type)
-                available_titles.update(titles)
+                # Primary: Get content with GUID/TMDb ID information
+                guid_content = self.get_library_content_with_guids(library['key'], media_type)
+                available_tmdb_ids.update(guid_content)
+                
+                # Fallback: Get title variations for items without TMDb IDs
+                title_content = self.get_library_content_titles(library['key'], media_type)
+                available_titles.update(title_content)
         
-        # Check each item against available titles
+        # Check each item against available content
         results = {}
         for item in items:
             title = item.get('title') if isinstance(item, dict) else item
-            if title:
-                # Generate all variations of the AI title for matching
+            if not title:
+                continue
+                
+            is_available = False
+            
+            # Method 1: TMDb ID matching (most accurate)
+            tmdb_id = None
+            if isinstance(item, dict):
+                tmdb_id = item.get('tmdb_id')
+            
+            if tmdb_id and tmdb_id in available_tmdb_ids:
+                is_available = True
+                print(f"DEBUG: TMDb ID match found - '{title}' (TMDb ID: {tmdb_id}) matches '{available_tmdb_ids[tmdb_id]}'")
+            
+            # Method 2: Title variation matching (fallback)
+            if not is_available:
                 ai_variations = get_title_variations(title)
-                
-                # Use only exact set-based matching (no substring fallback)
-                # This prevents false positives like "Mythbusters Jr." matching "Mythbusters"
                 is_available = bool(ai_variations & available_titles)
-                
-                results[title] = is_available
+                if is_available:
+                    print(f"DEBUG: Title match found - '{title}' matched via title variations")
+            
+            results[title] = is_available
         
         return results
 
@@ -2077,29 +2195,19 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             available_titles = []
             return results, available_titles, tmdb_map, time.time() - start_batch
         
-        # Step 1: Batch check Plex availability for all items
-        plex_availability = plex.batch_check_availability(items, media_type)
-        
-        # Step 2: Process TMDb IDs in batches for items that need them
-        items_needing_tmdb = []
+        # Step 1: Resolve TMDb IDs for all items first (needed for GUID matching)
         for it in items:
             title = it.get('title') if isinstance(it, dict) else it
             if title and not pre_map.get(title):
-                items_needing_tmdb.append(it)
+                year = it.get('year') if isinstance(it, dict) else None
+                tmdb_id = _tmdb_search_id(title, year, media_type)
+                if isinstance(it, dict): 
+                    it['tmdb_id'] = tmdb_id
+                if tmdb_id:
+                    pre_map[title] = tmdb_id
         
-        # Resolve TMDb IDs in smaller batches
-        if items_needing_tmdb:
-            batch_size = 5
-            for i in range(0, len(items_needing_tmdb), batch_size):
-                batch = items_needing_tmdb[i:i + batch_size]
-                for it in batch:
-                    title = it.get('title') if isinstance(it, dict) else it
-                    year = it.get('year') if isinstance(it, dict) else None
-                    tmdb_id = _tmdb_search_id(title, year, media_type)
-                    if isinstance(it, dict): 
-                        it['tmdb_id'] = tmdb_id
-                    if tmdb_id:
-                        pre_map[title] = tmdb_id
+        # Step 2: Batch check Plex availability for all items (now with TMDb IDs)
+        plex_availability = plex.batch_check_availability(items, media_type)
         
         # Step 3: Build final results
         for it in items:
@@ -2107,7 +2215,7 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             year = it.get('year') if isinstance(it, dict) else None
             
             # Get TMDb ID
-            tmdb_id = pre_map.get(title)
+            tmdb_id = pre_map.get(title) or (it.get('tmdb_id') if isinstance(it, dict) else None)
             
             # Get availability from Plex batch results
             plex_avail = plex_availability.get(title, False)
