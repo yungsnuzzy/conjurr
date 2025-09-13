@@ -29,7 +29,7 @@ import pickle
 import hashlib
 
 # App version (displayed in UI)
-VERSION = "v4.0 (The 'bedrock' update)"
+VERSION = "v4.0.1 (The 'bedrock' update)"
 
 # PyInstaller compatibility
 def get_base_path():
@@ -67,8 +67,8 @@ MOOD_LABEL_MAP = {
 
 # Load .env file (used in dev; for frozen EXE we'll use settings.ini)
 ROOT = Path(__file__).resolve().parent
+os.makedirs(ROOT / "env", exist_ok = True)
 if os.path.exists(ROOT / ".env"):
-    os.makedirs(ROOT / "env", exist_ok = True)
     shutil.move(ROOT / ".env", ROOT / "env" / ".env")
 ENV_PATH = find_dotenv(usecwd=True) or str(ROOT / "env" / ".env")
 load_dotenv(ENV_PATH)
