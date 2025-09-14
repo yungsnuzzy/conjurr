@@ -29,7 +29,7 @@ import pickle
 import hashlib
 
 # App version (displayed in UI)
-VERSION = "v4.0.1 (The 'bedrock' update)"
+VERSION = "v4.0.2 (The 'bedrock' update)"
 
 # PyInstaller compatibility
 def get_base_path():
