@@ -1650,15 +1650,17 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
         gemini_recs['error'] = 'GOOGLE_API_KEY is not set in the environment.'
     elif top_shows or top_movies or mode == 'custom':
         import json as pyjson
+        
+        # Create more concise watched history summaries for faster processing
+        def _summarize_watched(items, max_items=20):
+            if len(items) <= max_items:
+                return items
+            # Keep most recent and some variety
+            recent = items[:10]
+            remaining = items[10:max_items]
+            return recent + remaining
+
         if mode == 'history':
-            # Create more concise watched history summaries for faster processing
-            def _summarize_watched(items, max_items=20):
-                if len(items) <= max_items:
-                    return items
-                # Keep most recent and some variety
-                recent = items[:10]
-                remaining = items[10:max_items]
-                return recent + remaining
 
             watched_shows_summary = _summarize_watched(watched_shows_in_prompt, 30)
             watched_movies_summary = _summarize_watched(watched_movies_in_prompt, 30)
