@@ -29,7 +29,7 @@ import pickle
 import hashlib
 
 # App version (displayed in UI)
-VERSION = "v4.0.2 (The 'bedrock' update)"
+VERSION = "v4.1 (The 'matchy' update)"
 
 # PyInstaller compatibility
 def get_base_path():
@@ -461,7 +461,10 @@ class PlexClient:
     def check_availability_for_items(self, items, media_type, selected_libraries=None):
         """Check availability for specific items only using targeted Plex API searches"""
         if not items:
-            return {}
+            return {}, []
+        
+        # Initialize debug log collection
+        debug_logs = []
             
         # Get libraries for this media type
         libraries = self.get_libraries()
@@ -473,10 +476,10 @@ class PlexClient:
             relevant_libraries = [lib for lib in relevant_libraries if str(lib['key']) in selected_libraries]
         
         if not relevant_libraries:
-            print(f"DEBUG: No {media_type} libraries found (after filtering)")
-            return {item.get('title') if isinstance(item, dict) else item: False for item in items}
+            debug_logs.append(f"No {media_type} libraries found (after filtering)")
+            return {item.get('title') if isinstance(item, dict) else item: False for item in items}, debug_logs
         
-        print(f"DEBUG: Checking availability for {len(items)} {media_type} items using targeted searches (no library scanning)")
+        debug_logs.append(f"Checking availability for {len(items)} {media_type} items using targeted searches (no library scanning)")
         
         results = {}
         
@@ -487,6 +490,7 @@ class PlexClient:
                 
             tmdb_id = item.get('tmdb_id') if isinstance(item, dict) else None
             is_available = False
+            item_logs = []
             
             # Check each library for this specific item using targeted searches
             for library in relevant_libraries:
@@ -495,59 +499,43 @@ class PlexClient:
                     
                 # Try TMDb ID search first (most accurate and fastest)
                 if tmdb_id:
-                    is_available = self._check_availability_by_tmdb_id(library['key'], media_type, tmdb_id, title)
+                    is_available, tmdb_logs = self._check_availability_by_tmdb_id(library['key'], media_type, tmdb_id, title)
+                    item_logs.extend(tmdb_logs)
                 
                 # Fallback to title search if TMDb ID didn't work
                 if not is_available:
-                    is_available = self._check_availability_by_title(library['key'], media_type, title)
+                    is_available, title_logs = self._check_availability_by_title(library['key'], media_type, title)
+                    item_logs.extend(title_logs)
             
             results[title] = is_available
+            
             if is_available:
-                print(f"DEBUG: ✓ Found '{title}' in Plex")
+                item_logs.append(f"✓ Found '{title}' in Plex")
             else:
-                print(f"DEBUG: ✗ '{title}' not found in Plex")
+                item_logs.append(f"✗ '{title}' not found in Plex")
+            
+            debug_logs.extend(item_logs)
         
-        return results
+        return results, debug_logs
     
     def _check_availability_by_tmdb_id(self, library_key, media_type, tmdb_id, title):
         """Check if specific item is available by TMDb ID using targeted search"""
+        logs = []
         try:
-            # Use Plex search API to look for this specific TMDb ID
-            search_url = f"{self.base_url}/library/sections/{library_key}/all"
-            params = {
-                'X-Plex-Token': self.token,
-                'guid': f'tmdb://{tmdb_id}'
-            }
+            logs.append(f"Trying TMDb ID {tmdb_id} for '{title}'")
             
-            response = requests.get(search_url, params=params, timeout=10)
-            if response.status_code == 200:
-                from xml.etree import ElementTree as ET
-                root = ET.fromstring(response.content)
-                
-                # Check if any items were found
-                items = root.findall('.//Video') if media_type == 'movie' else root.findall('.//Directory')
-                if items:
-                    plex_title = items[0].get('title', 'Unknown')
-                    print(f"DEBUG: TMDb ID match found - '{title}' (TMDb ID: {tmdb_id}) matches '{plex_title}'")
-                    return True
-                    
-        except Exception as e:
-            print(f"DEBUG: Error checking TMDb ID for '{title}': {e}")
-        
-        return False
-    
-    def _check_availability_by_title(self, library_key, media_type, title):
-        """Check if specific item is available by title using targeted search"""
-        try:
-            # Generate title variations for search
-            ai_variations = get_title_variations(title)
+            # Try multiple GUID formats that Plex might use
+            guid_formats = [
+                f'tmdb://{tmdb_id}',  # Modern Plex Movie agent
+                f'com.plexapp.agents.themoviedb://{tmdb_id}',  # Full agent path
+                f'tmdb://movie/{tmdb_id}' if media_type == 'movie' else f'tmdb://show/{tmdb_id}',  # With type
+            ]
             
-            # Try searching for each variation
-            for search_title in ai_variations:
+            for guid_format in guid_formats:
                 search_url = f"{self.base_url}/library/sections/{library_key}/all"
                 params = {
                     'X-Plex-Token': self.token,
-                    'title': search_title
+                    'guid': guid_format
                 }
                 
                 response = requests.get(search_url, params=params, timeout=10)
@@ -559,13 +547,85 @@ class PlexClient:
                     items = root.findall('.//Video') if media_type == 'movie' else root.findall('.//Directory')
                     if items:
                         plex_title = items[0].get('title', 'Unknown')
-                        print(f"DEBUG: Title match found - '{title}' matched '{plex_title}' via search term '{search_title}'")
-                        return True
+                        logs.append(f"TMDb ID match found - '{title}' (TMDb ID: {tmdb_id}, GUID: {guid_format}) matches '{plex_title}'")
+                        return True, logs
+                    else:
+                        logs.append(f"No match for GUID format '{guid_format}'")
+                    
+        except Exception as e:
+            logs.append(f"Error checking TMDb ID for '{title}': {e}")
+        
+        logs.append(f"TMDb ID {tmdb_id} not found in Plex for '{title}', will try title search")
+        return False, logs
+    
+    def _check_availability_by_title(self, library_key, media_type, title):
+        """Check if specific item is available by title using targeted search"""
+        logs = []
+        try:
+            # Generate title variations for search
+            ai_variations = get_title_variations(title)
+            
+            logs.append(f"Checking '{title}' with {len(ai_variations)} variations: {', '.join(list(ai_variations)[:5])}")
+            
+            # Normalize the original title for comparison
+            normalized_original = normalize_title(title)
+            
+            # Try searching for each variation
+            for search_title in ai_variations:
+                # Try library-specific search first (most reliable)
+                search_url = f"{self.base_url}/library/sections/{library_key}/all"
+                params = {
+                    'X-Plex-Token': self.token,
+                    'title': search_title
+                }
+                
+                response = requests.get(search_url, params=params, timeout=10)
+                if response.status_code == 200:
+                    from xml.etree import ElementTree as ET
+                    root = ET.fromstring(response.content)
+                    
+                    # Look for items of the correct type only
+                    if media_type == 'movie':
+                        items = root.findall('.//Video[@type="movie"]')
+                        if not items:
+                            items = root.findall('.//Video')  # Fallback if type attribute missing
+                    else:  # show
+                        items = root.findall('.//Directory[@type="show"]')
+                        if not items:
+                            items = root.findall('.//Directory')  # Fallback if type attribute missing
+                    
+                    if items:
+                        logs.append(f"Found {len(items)} {media_type} result(s) for '{search_title}' in library")
+                        
+                        # Validate the match using fuzzy comparison
+                        for item in items:
+                            plex_title = item.get('title', 'Unknown')
+                            item_type = item.get('type', 'unknown')
+                            
+                            # Double-check the item type matches what we're looking for
+                            if media_type == 'movie' and item_type not in ['movie', 'unknown']:
+                                logs.append(f"Skipping '{plex_title}' - wrong type: {item_type}")
+                                continue
+                            if media_type == 'show' and item_type not in ['show', 'unknown']:
+                                logs.append(f"Skipping '{plex_title}' - wrong type: {item_type}")
+                                continue
+                            
+                            normalized_plex = normalize_title(plex_title)
+                            
+                            # Use fuzzy matching to verify similarity
+                            similarity = fuzz.ratio(normalized_original, normalized_plex)
+                            
+                            # Require 70% similarity to confirm match (lowered to handle anthology series)
+                            if similarity >= 70:
+                                logs.append(f"✓ Title match - '{title}' matched '{plex_title}' (type: {item_type}) via '{search_title}' (similarity: {similarity}%)")
+                                return True, logs
+                            else:
+                                logs.append(f"Similarity too low - '{title}' vs '{plex_title}' ({similarity}%)")
                         
         except Exception as e:
-            print(f"DEBUG: Error checking title for '{title}': {e}")
+            logs.append(f"Error checking title for '{title}': {e}")
         
-        return False
+        return False, logs
 
 
 # Global Plex client instance
@@ -829,11 +889,11 @@ def normalize_title(title: str) -> str:
     # Remove all non-alphanumeric except spaces
     t = re.sub(r'[^a-z0-9 ]', '', t)
     
-    # Normalize common word variations
-    t = re.sub(r'\band\b', '', t)  # Remove "and" completely for better matching
-    t = re.sub(r'\bthe\b', '', t)  # Remove articles
-    t = re.sub(r'\ba\b', '', t)
-    t = re.sub(r'\ban\b', '', t)
+    # Remove common articles but KEEP "and" as it's often significant
+    # Only remove leading articles
+    t = re.sub(r'^\bthe\b\s+', '', t)  # Remove "the" only at start
+    t = re.sub(r'^\ba\b\s+', '', t)    # Remove "a" only at start
+    t = re.sub(r'^\ban\b\s+', '', t)   # Remove "an" only at start
     
     # Clean up multiple spaces and add back preserved suffix
     t = re.sub(r'\s+', ' ', t).strip()
@@ -855,6 +915,22 @@ def get_title_variations(title: str) -> set[str]:
     
     # Add original lowercased
     variations.add(title_lower)
+    
+    # Handle anthology series patterns (e.g., "The Haunting of Hill House" -> "The Haunting")
+    anthology_patterns = [
+        r'^(.*?)\s+of\s+[^:]+$',  # "The Haunting of Hill House" -> "The Haunting"
+        r'^(.*?):\s+.*$',          # "American Horror Story: Coven" -> "American Horror Story"
+    ]
+    for pattern in anthology_patterns:
+        match = re.match(pattern, title_lower)
+        if match:
+            anthology_base = match.group(1).strip()
+            if anthology_base:
+                variations.add(anthology_base)
+                # Also add normalized version
+                anthology_normalized = normalize_title(anthology_base)
+                if anthology_normalized:
+                    variations.add(anthology_normalized)
     
     # Remove common version suffixes for core matching
     version_suffixes = [
@@ -1228,6 +1304,10 @@ def get_posters_for_titles(media_type: str, titles: list[str], year_map: dict | 
                     results = j.get('results') or []
                     if results:
                         ntarget = normalize_title(title)
+                        
+                        # Debug: Log the search and what we found
+                        print(f"TMDb search for '{title}' (year hint: {year_hint}): Found {len(results)} results")
+                        
                         def score_item(it):
                             name = it.get('title') or it.get('name') or ''
                             year_field = it.get('release_date') or it.get('first_air_date') or ''
@@ -1238,10 +1318,31 @@ def get_posters_for_titles(media_type: str, titles: list[str], year_map: dict | 
                                 except Exception:
                                     year_val = None
                             title_score = fuzz.token_sort_ratio(ntarget, normalize_title(name))
-                            year_bonus = 5 if (year_hint and year_val == year_hint) else 0
-                            return (title_score + year_bonus, title_score, it.get('popularity') or 0)
+                            # Give much stronger year bonus (50 points) to prioritize exact year matches
+                            year_bonus = 50 if (year_hint and year_val == year_hint) else 0
+                            # Penalize items from different years when we have a year hint
+                            year_penalty = -20 if (year_hint and year_val and year_val != year_hint) else 0
+                            total_score = title_score + year_bonus + year_penalty
+                            
+                            # Debug: Log top candidates
+                            if len(results) > 1 and title.lower() in ['goosebumps', 'the office']:
+                                print(f"  Candidate: '{name}' ({year_val}) - title_score: {title_score}, year_bonus: {year_bonus}, year_penalty: {year_penalty}, total: {total_score}")
+                            
+                            return (total_score, title_score, it.get('popularity') or 0)
 
                         best = sorted(results, key=score_item, reverse=True)[0]
+                        best_name = best.get('title') or best.get('name') or ''
+                        best_year_field = best.get('release_date') or best.get('first_air_date') or ''
+                        best_year = None
+                        if isinstance(best_year_field, str) and len(best_year_field) >= 4:
+                            try:
+                                best_year = int(best_year_field[:4])
+                            except Exception:
+                                pass
+                        
+                        if len(results) > 1:
+                            print(f"  Selected: '{best_name}' ({best_year}) TMDb ID: {best.get('id')}")
+                        
                         path = best.get('poster_path')
                         tmdb_id = best.get('id')
                         if path and tmdb_id:
@@ -2406,11 +2507,23 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                 debug_info['mediaInfo_status'] = mi_status
                 debug_info['downloadStatus'] = download_status
                 
-                if mi_status == 4 or str(mi_status).lower() == 'available' or download_status == 1:
-                    debug_info['result'] = 'available_by_status'
+                # Overseerr status codes:
+                # 1 = Unknown, 2 = Pending, 3 = Processing, 4 = Partially Available, 5 = Available
+                # For shows, treat status 4 (Partially Available) as available since even 1 episode is enough
+                # For movies, only status 5 (Available) counts
+                if mi_status == 5 or str(mi_status).lower() == 'available':
+                    debug_info['result'] = 'fully_available_by_status'
                     if len(_overseerr_debug_samples) < 8:
                         _overseerr_debug_samples.append(debug_info)
                     result = (True, False)  # available but no explicit PlexUrl field
+                    _availability_cache[cache_key] = result
+                    return result
+                elif mi_status == 4:
+                    # Partially available - treat as available (at least 1 episode/season is in Plex)
+                    debug_info['result'] = 'partially_available_treated_as_available'
+                    if len(_overseerr_debug_samples) < 8:
+                        _overseerr_debug_samples.append(debug_info)
+                    result = (True, False)  # treat as available
                     _availability_cache[cache_key] = result
                     return result
             
@@ -2436,15 +2549,17 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
     def _resolve(items, media_type, pre_map):
         results = []
         tmdb_map = {}
+        availability_debug_logs = []
+        
         if not items:
-            return [], [], {}, 0.0
+            return [], [], {}, 0.0, []
         
         start_batch = time.time()
         
         # Get Plex client for availability checking
         plex = get_plex_client()
         if plex is None:
-            print("Warning: Plex not configured, marking all items as unavailable")
+            availability_debug_logs.append("Warning: Plex not configured, marking all items as unavailable")
             # If Plex not configured, mark all as unavailable
             for it in items:
                 title = it.get('title') if isinstance(it, dict) else it
@@ -2467,7 +2582,7 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                     tmdb_map[title] = tmdb_id
                     
             available_titles = []
-            return results, available_titles, tmdb_map, time.time() - start_batch
+            return results, available_titles, tmdb_map, time.time() - start_batch, availability_debug_logs
         
         # Step 1: Resolve TMDb IDs for all items first (needed for GUID matching)
         for it in items:
@@ -2481,7 +2596,8 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                     pre_map[title] = tmdb_id
         
         # Step 2: Check Plex availability for all items (targeted checking only)
-        plex_availability = plex.check_availability_for_items(items, media_type, selected_libraries)
+        plex_availability, plex_logs = plex.check_availability_for_items(items, media_type, selected_libraries)
+        availability_debug_logs.extend(plex_logs)
         
         # Step 3: Build final results
         for it in items:
@@ -2506,10 +2622,10 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                 tmdb_map[title] = tmdb_id
         
         available_titles = [r['ai_title'] for r in results if r.get('plex_available') and r.get('ai_title') not in watched_set_all]
-        return results, available_titles, tmdb_map, time.time() - start_batch
+        return results, available_titles, tmdb_map, time.time() - start_batch, availability_debug_logs
 
-    show_matches, rec_shows, tmdb_map_shows, dur_shows = _resolve(ai_shows, 'show', tmdb_pre_map_shows)
-    movie_matches, rec_movies, tmdb_map_movies, dur_movies = _resolve(ai_movies, 'movie', tmdb_pre_map_movies)
+    show_matches, rec_shows, tmdb_map_shows, dur_shows, show_debug_logs = _resolve(ai_shows, 'show', tmdb_pre_map_shows)
+    movie_matches, rec_movies, tmdb_map_movies, dur_movies, movie_debug_logs = _resolve(ai_movies, 'movie', tmdb_pre_map_movies)
     tmdb_map_all = {**tmdb_map_shows, **tmdb_map_movies}
     timing['availability'] = dur_shows + dur_movies
     timing['fuzzy_match'] = timing['availability']  # maintain legacy key
@@ -2611,7 +2727,11 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             'movies_total': len(watched_movies_unique),
             'movies_included': len(watched_movies_in_prompt),
         },
-        'timing': timing
+        'timing': timing,
+        'availability_matching': {
+            'shows': show_debug_logs,
+            'movies': movie_debug_logs,
+        }
     })
     # Add poster source breakdown to debug for UI
     debug['poster_sources'] = {

@@ -847,6 +847,21 @@
                     <div style="color:red;">{{ recs.debug.ai_provider|title if recs and recs.debug and recs.debug.ai_provider else 'AI' }} error: {{ recs.debug.ai_error }}</div>
                 {% endif %}
             </div>
+            {% if recs.debug.availability_matching %}
+            <div style="margin-top:15px;">
+                <b>Plex Availability Matching:</b>
+                {% if recs.debug.availability_matching.shows %}
+                <div style="margin-top:10px;"><b>Shows:</b></div>
+                <pre style="white-space:pre-wrap;max-height:400px;overflow:auto;font-size:0.85em;background:#f5f5f5;padding:10px;border-radius:4px;">{% for log in recs.debug.availability_matching.shows %}{{ log }}
+{% endfor %}</pre>
+                {% endif %}
+                {% if recs.debug.availability_matching.movies %}
+                <div style="margin-top:10px;"><b>Movies:</b></div>
+                <pre style="white-space:pre-wrap;max-height:400px;overflow:auto;font-size:0.85em;background:#f5f5f5;padding:10px;border-radius:4px;">{% for log in recs.debug.availability_matching.movies %}{{ log }}
+{% endfor %}</pre>
+                {% endif %}
+            </div>
+            {% endif %}
             {% if recs.debug.overseerr_availability %}
             <div style="margin-top:15px;">
                 <b>Overseerr Availability Debug:</b>
