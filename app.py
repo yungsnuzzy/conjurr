@@ -252,6 +252,7 @@ def get_settings():
         'SELECTED_LIBRARIES': [],
         'MISTRAL_API_KEY': '',
         'OPENROUTER_API_KEY': '',
+        'OLLAMA_BASE_URL': 'http://localhost:11434',
         'AI_PROVIDER': 'gemini',
         'AI_MODEL': '',
         'AI_DAILY_QUOTAS': '',
@@ -368,6 +369,7 @@ def reload_settings():
     # AI Provider Configuration
     g.AI_PROVIDER = settings.get('AI_PROVIDER', 'gemini')
     g.AI_MODEL = settings.get('AI_MODEL', '').strip()
+    g.OLLAMA_BASE_URL = (settings.get('OLLAMA_BASE_URL') or 'http://localhost:11434').rstrip('/')
     g.AI_DAILY_QUOTAS = {}
     try:
         import json as _json
@@ -2145,6 +2147,53 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             except Exception as e:
                 gemini_recs['error'] = f"OpenRouter request failed: {e}"
                 
+        elif g.AI_PROVIDER == 'ollama':
+            # Local Ollama implementation
+            base_url = getattr(g, 'OLLAMA_BASE_URL', 'http://localhost:11434').rstrip('/')
+            gemini_recs['ai_endpoint'] = f'{base_url}/api/chat'
+            try:
+                import requests
+                # Default model selection for Ollama (override via AI_MODEL in settings)
+                model_name = g.AI_MODEL or "llama3.2"
+                data = {
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": False,
+                }
+                response = requests.post(f"{base_url}/api/chat", json=data, timeout=120)
+                response.raise_for_status()
+                result = response.json()
+                message = result.get('message') or {}
+                content = message.get('content', '') or ''
+                gemini_recs['raw_response'] = content
+                gemini_recs['model_used'] = model_name
+                # Ollama does not currently return token usage in the same way; leave None/empty
+                gemini_recs['usage'] = {
+                    'prompt_token_count': None,
+                    'candidates_token_count': None,
+                    'total_token_count': None,
+                }
+                rec_json = extract_json_object(content)
+                gemini_recs['parsed_json'] = rec_json
+                if not rec_json:
+                    raise ValueError('No JSON found in Ollama response')
+                ai_recommended = pyjson.loads(rec_json)
+                cats = ai_recommended.get('categories', []) or []
+                if cats and isinstance(cats[0], dict):
+                    cats = [c.get('name') or c.get('title') or str(c) for c in cats]
+                ai_recommended['categories'] = [c for c in cats if isinstance(c, str)]
+                # Record usage for consistency (will store None counts)
+                ut = gemini_recs.get('usage') or {}
+                record_usage(
+                    model_name,
+                    ut.get('prompt_token_count'),
+                    ut.get('candidates_token_count'),
+                    ut.get('total_token_count'),
+                )
+                gemini_recs['usage_today'] = get_usage_today(model_name)
+                gemini_recs['available_models'] = [model_name]
+            except Exception as e:
+                gemini_recs['error'] = f"Ollama request failed: {e}"
         else:
             gemini_recs['error'] = f"Unsupported AI provider: {g.AI_PROVIDER}"
     
@@ -2187,6 +2236,16 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
     timing['ai_parse'] = time.time() - t5
 
     # Step 7: Diversity enforcement (already applied above) + On-demand Plex availability & fuzzy match
+    # Support a "fast mode" that skips heavy availability checks (used by external tools like newsletterr).
+    from flask import request as _req_fast
+    fast_mode = False
+    try:
+        # Fast mode is enabled when the request path starts with /fast/ (e.g., /fast/recommendations)
+        # This lets callers choose between full availability and speed using only the base URL.
+        if _req_fast and _req_fast.path.startswith('/fast/'):
+            fast_mode = True
+    except Exception:
+        fast_mode = False
     t6 = time.time()
     def _enforce_diversity(items, target_count=20):
         # Items may be dicts with optional 'director' and 'genres' fields.
@@ -2244,36 +2303,39 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
     # Build year maps from AI items once (used for pre-ID resolution AND later poster fetch)
     ai_show_years = {}
     ai_movie_years = {}
-    try:
+    tmdb_pre_map_shows = {}
+    tmdb_pre_map_movies = {}
+    if not fast_mode:
+        try:
+            for it in ai_shows:
+                if isinstance(it, dict):
+                    t = it.get('title'); y = it.get('year')
+                    if t and isinstance(y, (int, float)):
+                        try: ai_show_years[t] = int(y)
+                        except Exception: pass
+            for it in ai_movies:
+                if isinstance(it, dict):
+                    t = it.get('title'); y = it.get('year')
+                    if t and isinstance(y, (int, float)):
+                        try: ai_movie_years[t] = int(y)
+                        except Exception: pass
+        except Exception:
+            pass
+        # Collect raw title lists
+        ai_show_titles = [it.get('title') for it in ai_shows if isinstance(it, dict) and it.get('title')] if ai_shows else []
+        ai_movie_titles = [it.get('title') for it in ai_movies if isinstance(it, dict) and it.get('title')] if ai_movies else []
+        # Pre-resolve posters (fetch_details False) purely to obtain authoritative tmdb_id for every AI item
+        pre_show_tmdb = get_posters_for_titles('show', ai_show_titles, ai_show_years, fetch_details=False) if ai_show_titles else []
+        pre_movie_tmdb = get_posters_for_titles('movie', ai_movie_titles, ai_movie_years, fetch_details=False) if ai_movie_titles else []
+        tmdb_pre_map_shows = {p['title']: p.get('tmdb_id') for p in pre_show_tmdb if p.get('tmdb_id')}
+        tmdb_pre_map_movies = {p['title']: p.get('tmdb_id') for p in pre_movie_tmdb if p.get('tmdb_id')}
+        # Strip any AI-provided tmdb_ids to avoid trusting hallucinated IDs; we'll overwrite later if needed.
         for it in ai_shows:
-            if isinstance(it, dict):
-                t = it.get('title'); y = it.get('year')
-                if t and isinstance(y, (int, float)):
-                    try: ai_show_years[t] = int(y)
-                    except Exception: pass
+            if isinstance(it, dict): it['tmdb_id'] = tmdb_pre_map_shows.get(it.get('title'))
         for it in ai_movies:
-            if isinstance(it, dict):
-                t = it.get('title'); y = it.get('year')
-                if t and isinstance(y, (int, float)):
-                    try: ai_movie_years[t] = int(y)
-                    except Exception: pass
-    except Exception:
-        pass
-    # Collect raw title lists
-    ai_show_titles = [it.get('title') for it in ai_shows if isinstance(it, dict) and it.get('title')] if ai_shows else []
-    ai_movie_titles = [it.get('title') for it in ai_movies if isinstance(it, dict) and it.get('title')] if ai_movies else []
-    # Pre-resolve posters (fetch_details False) purely to obtain authoritative tmdb_id for every AI item
-    pre_show_tmdb = get_posters_for_titles('show', ai_show_titles, ai_show_years, fetch_details=False) if ai_show_titles else []
-    pre_movie_tmdb = get_posters_for_titles('movie', ai_movie_titles, ai_movie_years, fetch_details=False) if ai_movie_titles else []
-    tmdb_pre_map_shows = {p['title']: p.get('tmdb_id') for p in pre_show_tmdb if p.get('tmdb_id')}
-    tmdb_pre_map_movies = {p['title']: p.get('tmdb_id') for p in pre_movie_tmdb if p.get('tmdb_id')}
-    # Strip any AI-provided tmdb_ids to avoid trusting hallucinated IDs; we'll overwrite later if needed.
-    for it in ai_shows:
-        if isinstance(it, dict): it['tmdb_id'] = tmdb_pre_map_shows.get(it.get('title'))
-    for it in ai_movies:
-        if isinstance(it, dict): it['tmdb_id'] = tmdb_pre_map_movies.get(it.get('title'))
+            if isinstance(it, dict): it['tmdb_id'] = tmdb_pre_map_movies.get(it.get('title'))
 
-    # Overseerr-based availability using TMDb IDs (preferred)
+    # Overseerr-based availability using TMDb IDs (preferred; skipped in fast mode)
     overseerr_available_shows = []
     overseerr_available_movies = []
     show_matches = []
@@ -2551,8 +2613,22 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
         tmdb_map = {}
         availability_debug_logs = []
         
-        if not items:
-            return [], [], {}, 0.0, []
+        if not items or fast_mode:
+            # In fast mode, or with no items, skip heavy availability logic and just attach basic structures.
+            for it in items or []:
+                title = it.get('title') if isinstance(it, dict) else it
+                year = it.get('year') if isinstance(it, dict) else None
+                tmdb_id = pre_map.get(title) if pre_map else None
+                results.append({
+                    'ai_title': title,
+                    'ai_year': year,
+                    'tmdb_id': tmdb_id,
+                    'plex_available': False,
+                    'plex_url': False
+                })
+                if tmdb_id:
+                    tmdb_map[title] = tmdb_id
+            return results, [], tmdb_map, 0.0, []
         
         start_batch = time.time()
         
@@ -2634,12 +2710,12 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
         'movies_checked': len(ai_movies),
         'shows_available': len(rec_shows),
         'movies_available': len(rec_movies),
-        'plex_hits_shows': sum(1 for m in show_matches if m.get('plex_url')),
-        'plex_hits_movies': sum(1 for m in movie_matches if m.get('plex_url')),
+        'plex_hits_shows': sum(1 for m in show_matches if m.get('plex_url')) if not fast_mode else 0,
+        'plex_hits_movies': sum(1 for m in movie_matches if m.get('plex_url')) if not fast_mode else 0,
         'duration_shows': round(dur_shows,3),
         'duration_movies': round(dur_movies,3),
         'duration_total': round(timing['availability'],3),
-        'optimization': 'direct_plex_api',
+        'optimization': 'direct_plex_api' if not fast_mode else 'fast_mode_skip',
         'plex_configured': get_plex_client() is not None
     }
     # TMDb resolution debug summary
@@ -3097,6 +3173,7 @@ def get_seasonal_prompt():
 
 
 @app.route('/recommendations')
+@app.route('/fast/recommendations')
 def recommendations():
     # Get parameters
     user_id = request.args.get('user_id')
@@ -3446,7 +3523,8 @@ def index():
         provider_names = {
             'gemini': 'Gemini',
             'mistral': 'Mistral',
-            'openrouter': 'OpenRouter'
+            'openrouter': 'OpenRouter',
+            'ollama': 'Ollama (local)'
         }
         provider_name = provider_names.get(ai_provider, ai_provider.title())
         
@@ -3458,6 +3536,9 @@ def index():
             api_key_exists = bool(getattr(g, 'MISTRAL_API_KEY', ''))
         elif ai_provider == 'openrouter':
             api_key_exists = bool(getattr(g, 'OPENROUTER_API_KEY', ''))
+        elif ai_provider == 'ollama':
+            # Local provider, no API key required
+            api_key_exists = True
         
         model_display = ai_model if ai_model else 'Auto-selected'
         status_text = f'{provider_name}: {model_display}'
