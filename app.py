@@ -1898,7 +1898,7 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             # Try a shortlist of commonly available models with the new google-genai SDK
             gemini_recs['ai_endpoint'] = 'https://generativelanguage.googleapis.com/v1beta/models'
             # Preferred model order. Allow override via GEMINI_MODEL (.env) and prioritize requested 2.5 flash lite.
-            default_order = ['gemini-2.5-flash-lite', 'gemini-2.0-flash-001']
+            default_order = ['gemini-2.5-flash-lite']
             print(f"DEBUG: g.AI_MODEL = {getattr(g, 'AI_MODEL', 'NOT SET')}")
             print(f"DEBUG: g.GEMINI_MODEL = {getattr(g, 'GEMINI_MODEL', 'NOT SET')}")
             if getattr(g, 'GEMINI_MODEL', ''):
