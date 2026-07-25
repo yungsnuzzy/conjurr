@@ -1898,7 +1898,14 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             # Try a shortlist of commonly available models with the new google-genai SDK
             gemini_recs['ai_endpoint'] = 'https://generativelanguage.googleapis.com/v1beta/models'
             # Preferred model order. Allow override via GEMINI_MODEL (.env) and prioritize requested 2.5 flash lite.
-            default_order = ['gemini-2.5-flash-lite', 'gemini-2.0-flash-001']
+            # Note: gemini-2.0-flash-001 was removed from this list -- Google deprecated it on 2026-06-01 and it
+            # now returns 429 RESOURCE_EXHAUSTED with limit: 0 on every free-tier key, which was masking the real
+            # error from the user's actually-configured model (see the first_err handling below).
+            # gemini-2.5-flash-lite itself started returning 404 NOT_FOUND ("no longer available to new users")
+            # on 2026-07-09, ahead of its officially announced 2026-10-16 shutdown, so it's no longer a safe
+            # default either. gemini-3.5-flash-lite is the current free-tier low-cost successor, with
+            # gemini-3.1-flash-lite as a second free-tier fallback in case of another early cutover.
+            default_order = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
             print(f"DEBUG: g.AI_MODEL = {getattr(g, 'AI_MODEL', 'NOT SET')}")
             print(f"DEBUG: g.GEMINI_MODEL = {getattr(g, 'GEMINI_MODEL', 'NOT SET')}")
             if getattr(g, 'GEMINI_MODEL', ''):
@@ -1912,6 +1919,8 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             print(f"DEBUG: Trying models in order: {tried_models}")
             client = getattr(g, 'genai_client', None)
             last_err = None
+            first_err = None
+            first_err_model = None
             if client is None:
                 gemini_recs['error'] = 'GenAI client not initialized.'
             else:
@@ -1963,11 +1972,21 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                         break
                     except Exception as e:
                         last_err = e
+                        if first_err is None:
+                            first_err = e
+                            first_err_model = model_name
                         print(f"DEBUG: Model {model_name} failed: {e}")
                         gemini_recs['error'] = f"Tried model {model_name}: {e}"
                 if gemini_recs['error'] and last_err is not None:
-                    # Keep the last error for context
-                    gemini_recs['error'] = f"Gemini request failed: {last_err}"
+                    # Keep the last error for context. If a fallback model's failure would otherwise mask the
+                    # original (usually user-preferred) model's failure, surface both so the real cause isn't lost.
+                    if first_err_model is not None and first_err_model != model_name and first_err is not last_err:
+                        gemini_recs['error'] = (
+                            f"Gemini request failed: {last_err} "
+                            f"(preferred model '{first_err_model}' also failed: {first_err})"
+                        )
+                    else:
+                        gemini_recs['error'] = f"Gemini request failed: {last_err}"
         elif getattr(g, 'genai_sdk', None) == 'legacy':
             # Legacy SDK fallback
             gemini_recs['ai_endpoint'] = 'https://generativelanguage.googleapis.com/v1beta/models'
@@ -3625,6 +3644,12 @@ def settings_page():
             'AI_PROVIDER': request.form.get('AI_PROVIDER', 'gemini').strip(),
             'AI_MODEL': request.form.get('AI_MODEL', '').strip(),
             'AI_DAILY_QUOTAS': request.form.get('AI_DAILY_QUOTAS', '').strip(),
+            # Older settings templates (and some published Docker images) still submit these legacy
+            # field names instead of AI_MODEL/AI_DAILY_QUOTAS. Without this, those forms silently fail
+            # to persist the model/quota choice on save -- the page keeps re-displaying the original
+            # .env value forever, even though the user's edit appeared to save successfully.
+            'GEMINI_MODEL': request.form.get('GEMINI_MODEL', request.form.get('AI_MODEL', '')).strip(),
+            'GEMINI_DAILY_QUOTAS': request.form.get('GEMINI_DAILY_QUOTAS', request.form.get('AI_DAILY_QUOTAS', '')).strip(),
             'TMDB_API_KEY': request.form.get('TMDB_API_KEY', '').strip(),
             'OVERSEERR_URL': request.form.get('OVERSEERR_URL', '').strip(),
             'OVERSEERR_API_KEY': request.form.get('OVERSEERR_API_KEY', '').strip(),
