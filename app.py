@@ -1898,7 +1898,10 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             # Try a shortlist of commonly available models with the new google-genai SDK
             gemini_recs['ai_endpoint'] = 'https://generativelanguage.googleapis.com/v1beta/models'
             # Preferred model order. Allow override via GEMINI_MODEL (.env) and prioritize requested 2.5 flash lite.
-            default_order = ['gemini-2.5-flash-lite', 'gemini-2.0-flash-001']
+            # Note: gemini-2.0-flash-001 was removed from this list -- Google deprecated it on 2026-06-01 and it
+            # now returns 429 RESOURCE_EXHAUSTED with limit: 0 on every free-tier key, which was masking the real
+            # error from the user's actually-configured model (see the first_err handling below).
+            default_order = ['gemini-2.5-flash-lite']
             print(f"DEBUG: g.AI_MODEL = {getattr(g, 'AI_MODEL', 'NOT SET')}")
             print(f"DEBUG: g.GEMINI_MODEL = {getattr(g, 'GEMINI_MODEL', 'NOT SET')}")
             if getattr(g, 'GEMINI_MODEL', ''):
@@ -1912,6 +1915,8 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             print(f"DEBUG: Trying models in order: {tried_models}")
             client = getattr(g, 'genai_client', None)
             last_err = None
+            first_err = None
+            first_err_model = None
             if client is None:
                 gemini_recs['error'] = 'GenAI client not initialized.'
             else:
@@ -1963,11 +1968,21 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                         break
                     except Exception as e:
                         last_err = e
+                        if first_err is None:
+                            first_err = e
+                            first_err_model = model_name
                         print(f"DEBUG: Model {model_name} failed: {e}")
                         gemini_recs['error'] = f"Tried model {model_name}: {e}"
                 if gemini_recs['error'] and last_err is not None:
-                    # Keep the last error for context
-                    gemini_recs['error'] = f"Gemini request failed: {last_err}"
+                    # Keep the last error for context. If a fallback model's failure would otherwise mask the
+                    # original (usually user-preferred) model's failure, surface both so the real cause isn't lost.
+                    if first_err_model is not None and first_err_model != model_name and first_err is not last_err:
+                        gemini_recs['error'] = (
+                            f"Gemini request failed: {last_err} "
+                            f"(preferred model '{first_err_model}' also failed: {first_err})"
+                        )
+                    else:
+                        gemini_recs['error'] = f"Gemini request failed: {last_err}"
         elif getattr(g, 'genai_sdk', None) == 'legacy':
             # Legacy SDK fallback
             gemini_recs['ai_endpoint'] = 'https://generativelanguage.googleapis.com/v1beta/models'
