@@ -3644,6 +3644,12 @@ def settings_page():
             'AI_PROVIDER': request.form.get('AI_PROVIDER', 'gemini').strip(),
             'AI_MODEL': request.form.get('AI_MODEL', '').strip(),
             'AI_DAILY_QUOTAS': request.form.get('AI_DAILY_QUOTAS', '').strip(),
+            # Older settings templates (and some published Docker images) still submit these legacy
+            # field names instead of AI_MODEL/AI_DAILY_QUOTAS. Without this, those forms silently fail
+            # to persist the model/quota choice on save -- the page keeps re-displaying the original
+            # .env value forever, even though the user's edit appeared to save successfully.
+            'GEMINI_MODEL': request.form.get('GEMINI_MODEL', request.form.get('AI_MODEL', '')).strip(),
+            'GEMINI_DAILY_QUOTAS': request.form.get('GEMINI_DAILY_QUOTAS', request.form.get('AI_DAILY_QUOTAS', '')).strip(),
             'TMDB_API_KEY': request.form.get('TMDB_API_KEY', '').strip(),
             'OVERSEERR_URL': request.form.get('OVERSEERR_URL', '').strip(),
             'OVERSEERR_API_KEY': request.form.get('OVERSEERR_API_KEY', '').strip(),
