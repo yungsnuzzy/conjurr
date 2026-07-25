@@ -1901,7 +1901,11 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             # Note: gemini-2.0-flash-001 was removed from this list -- Google deprecated it on 2026-06-01 and it
             # now returns 429 RESOURCE_EXHAUSTED with limit: 0 on every free-tier key, which was masking the real
             # error from the user's actually-configured model (see the first_err handling below).
-            default_order = ['gemini-2.5-flash-lite']
+            # gemini-2.5-flash-lite itself started returning 404 NOT_FOUND ("no longer available to new users")
+            # on 2026-07-09, ahead of its officially announced 2026-10-16 shutdown, so it's no longer a safe
+            # default either. gemini-3.5-flash-lite is the current free-tier low-cost successor, with
+            # gemini-3.1-flash-lite as a second free-tier fallback in case of another early cutover.
+            default_order = ['gemini-3.5-flash-lite', 'gemini-3.1-flash-lite']
             print(f"DEBUG: g.AI_MODEL = {getattr(g, 'AI_MODEL', 'NOT SET')}")
             print(f"DEBUG: g.GEMINI_MODEL = {getattr(g, 'GEMINI_MODEL', 'NOT SET')}")
             if getattr(g, 'GEMINI_MODEL', ''):
