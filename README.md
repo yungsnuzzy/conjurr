@@ -28,7 +28,7 @@ Conjurr analyzes Plex watch history via Tautulli, resolves TMDb IDs, and uses Go
 3. Visit `/settings` and enter:
 	- Tautulli URL and API key
 	- Google Gemini API key
-	- Optional: Tautulli DB Path (for faster local reads)
+	- Optional: Tautulli DB Path (only for explicitly configured local reads; otherwise leave blank)
 	- Optional: TMDb API key (to enable posters)
 	- Optional: Gemini daily quotas JSON (e.g. {"gemini-2.0-flash-001": 200})
 
@@ -36,12 +36,18 @@ Environment/.env keys recognized:
 - TAUTULLI_URL
 - TAUTULLI_API_KEY
 - GOOGLE_API_KEY
-- TAUTULLI_DB_PATH (optional)
+- TAUTULLI_DB_PATH (optional; empty by default)
 - TMDB_API_KEY (optional)
 - GEMINI_DAILY_QUOTAS (optional JSON)
 - USER_MODE (optional: 1 to enable user mode, 0 to disable)
 - OVERSEERR_URL (optional: enables poster links to Overseerr)
 - OVERSEERR_API_KEY (optional: only needed if Overseerr endpoint requires it for lookups)
+
+Tautulli database access is not required, including with Docker or a remote server.
+The Tautulli URL and API key provide user lookup, recent viewing preferences, and
+paginated full watch history for filtering watched titles. An inaccessible optional
+database falls back to the API and does not block saving settings. API-only access
+may take longer for users with large histories, but does not intentionally limit history.
 
 User Mode flag:
 - Prefer setting `USER_MODE=1` in your `.env` to enable user mode (hides settings/debug, requires email/username login, auto mobile UI for phones/tablets). You can still set the code default in `app.py` but `.env` wins.

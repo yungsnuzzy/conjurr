@@ -6,6 +6,7 @@ from pathlib import Path
 from dotenv import load_dotenv, set_key, dotenv_values, find_dotenv
 import configparser
 from usage_tracker import record_usage, get_usage_today
+import recommendation_store
 from collections import Counter
 # Prefer new google-genai SDK; fall back to legacy google-generativeai if present
 try:
@@ -27,6 +28,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import sys
 import pickle
 import hashlib
+import schedule as schedule_lib
 
 # App version (displayed in UI)
 VERSION = "v4.1 (The 'matchy' update)"
@@ -255,14 +257,9 @@ def get_settings():
         'AI_PROVIDER': 'gemini',
         'AI_MODEL': '',
         'AI_DAILY_QUOTAS': '',
+        'REC_SCHEDULE_TIME': '03:00',
+        'REC_SCHEDULER_ENABLED': '0',
     }
-    # Suggested default DB path (Windows)
-    try:
-        localapp = os.environ.get('LOCALAPPDATA')
-        if localapp:
-            defaults['TAUTULLI_DB_PATH'] = os.path.join(localapp, 'Tautulli', 'Tautulli.db')
-    except Exception:
-        pass
     # If running frozen, prefer INI; else use .env
     if is_frozen():
         ini_vals = read_settings_ini()
@@ -772,6 +769,30 @@ def get_cached_users():
             _USER_CACHE['ts'] = time.time()
     return users
 
+def get_tautulli_history_page(params):
+    try:
+        response = requests.get(f"{g.TAUTULLI_URL.rstrip('/')}/api/v2", params=params, timeout=15)
+    except requests.Timeout:
+        raise ValueError('Tautulli history request timed out. Check the server and connection.') from None
+    except requests.RequestException:
+        raise ValueError('Could not connect to Tautulli for watch history. Check its URL and connection.') from None
+    try:
+        envelope = response.json().get('response', {})
+        if not isinstance(envelope, dict):
+            raise ValueError('Invalid Tautulli response envelope')
+    except (ValueError, AttributeError):
+        raise ValueError(f'Tautulli history returned an invalid response (HTTP {response.status_code}). Check its URL and server logs.') from None
+    if not response.ok or envelope.get('result') != 'success':
+        message = str(envelope.get('message') or 'Check the API key and Tautulli server logs.')
+        if g.TAUTULLI_API_KEY:
+            message = message.replace(g.TAUTULLI_API_KEY, '[redacted]')
+        raise ValueError(f'Tautulli history request failed (HTTP {response.status_code}): {message}')
+    payload = envelope.get('data')
+    if not isinstance(payload, dict) or not isinstance(payload.get('data'), list):
+        raise ValueError('Tautulli history returned an unexpected data format. Check the server logs.')
+    return payload
+
+
 # Helper to fetch user watch history from Tautulli
 def get_user_watch_history_api(user_id, selected_libraries=None):
     """Always fetch recent (bounded window) history via API for top/recent calculations."""
@@ -781,12 +802,10 @@ def get_user_watch_history_api(user_id, selected_libraries=None):
         'cmd': 'get_history',
         'user_id': user_id,
         'length': 1000,
-        'after': one_year_ago
+        'after': datetime.fromtimestamp(one_year_ago).strftime('%Y-%m-%d')
     }
     try:
-        resp = requests.get(f"{g.TAUTULLI_URL}/api/v2", params=params, timeout=5)
-        data = resp.json()
-        items = data.get('response', {}).get('data', {}).get('data', [])
+        items = get_tautulli_history_page(params)['data']
         
         # Filter by selected libraries if provided and section_id is available
         if selected_libraries and items:
@@ -799,7 +818,9 @@ def get_user_watch_history_api(user_id, selected_libraries=None):
             items = filtered_items
         
         return items
-    except Exception:
+    except ValueError as error:
+        g.tautulli_history_error = str(error)
+        app.logger.warning('%s', error)
         return []
 
 def get_user_watch_history(user_id, selected_libraries=None):
@@ -836,14 +857,15 @@ def get_user_watch_history_all(user_id, selected_libraries=None):
             'length': page_size
         }
         try:
-            resp = requests.get(f"{g.TAUTULLI_URL}/api/v2", params=params, timeout=15)
-            data = resp.json()
-            payload = data.get('response', {}).get('data', {})
+            payload = get_tautulli_history_page(params)
             items = payload.get('data', []) if isinstance(payload, dict) else []
             if total_records is None and isinstance(payload, dict):
-                total_records = payload.get('recordsTotal') or payload.get('recordsFiltered')
+                total_records = payload.get('recordsFiltered')
+                if total_records is None:
+                    total_records = payload.get('recordsTotal')
             if not items:
                 break
+            start += len(items)
             
             # Filter by selected libraries if provided
             if selected_libraries:
@@ -857,10 +879,11 @@ def get_user_watch_history_all(user_id, selected_libraries=None):
             
             all_items.extend(items)
             # Stop if we've collected all records
-            if total_records is not None and len(all_items) >= int(total_records):
+            if total_records is not None and start >= int(total_records):
                 break
-            start += page_size
-        except Exception:
+        except ValueError as error:
+            g.tautulli_history_error = str(error)
+            app.logger.warning('%s', error)
             break
     return all_items
 
@@ -1511,11 +1534,76 @@ def extract_json_object(text: str) -> str | None:
     return None
 
 
+def get_provider_models(provider):
+    """List text-generation models offered by the configured provider."""
+    endpoints = {
+        'gemini': ('https://generativelanguage.googleapis.com/v1beta/models', 'GOOGLE_API_KEY'),
+        'mistral': ('https://api.mistral.ai/v1/models', 'MISTRAL_API_KEY'),
+        'openrouter': ('https://openrouter.ai/api/v1/models', 'OPENROUTER_API_KEY'),
+    }
+    if provider not in endpoints:
+        raise ValueError('Unsupported AI provider.')
+    endpoint, key_name = endpoints[provider]
+    api_key = g.settings.get(key_name, '')
+    if not api_key:
+        raise ValueError(f'{key_name} is not configured. Save it in Settings first.')
+    headers = {'x-goog-api-key': api_key} if provider == 'gemini' else {'Authorization': f'Bearer {api_key}'}
+    models = []
+    params = {'pageSize': 1000} if provider == 'gemini' else {}
+    while True:
+        try:
+            response = requests.get(endpoint, headers=headers, params=params, timeout=15)
+        except requests.RequestException:
+            raise ValueError(f'Unable to reach the {provider} model catalog. Check your connection.') from None
+        if not response.ok:
+            raise ValueError(f'{provider} model catalog returned HTTP {response.status_code}. Check your API key and provider access.')
+        payload = response.json()
+        for model in payload.get('models' if provider == 'gemini' else 'data', []):
+            if provider == 'gemini':
+                if 'generateContent' not in model.get('supportedGenerationMethods', []):
+                    continue
+                model_id = model.get('name', '').removeprefix('models/')
+                if not model_id.startswith('gemini-'):
+                    continue
+                if any(part in model_id for part in ('image', 'tts', 'robotics', 'computer-use')):
+                    continue
+                label = model.get('displayName') or model_id
+            else:
+                model_id = model.get('id', '')
+                if provider == 'mistral' and not model.get('capabilities', {}).get('completion_chat', True):
+                    continue
+                if provider == 'openrouter' and 'text' not in model.get('architecture', {}).get('output_modalities', ['text']):
+                    continue
+                label = model.get('name') or model_id
+            if model_id:
+                models.append({'id': model_id, 'name': label})
+        next_page = payload.get('nextPageToken') if provider == 'gemini' else None
+        if not next_page:
+            break
+        params['pageToken'] = next_page
+    if not models:
+        raise ValueError(f'No text-generation models were returned by {provider}.')
+    return sorted(models, key=lambda model: model['id'])
+
+
+@app.route('/api/models')
+def ai_models():
+    provider = request.args.get('provider') or g.AI_PROVIDER
+    try:
+        return jsonify({'models': get_provider_models(provider)})
+    except ValueError as error:
+        app.logger.warning('AI model catalog lookup failed for %s: %s', provider, error)
+        return jsonify({'error': str(error)}), 502
+    except requests.RequestException:
+        return jsonify({'error': f'Could not reach {provider}. Check your connection.'}), 502
+
+
 # Dummy recommendation logic (to be improved)
 def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=None, mood_code=None, requested_model=None):
     import time
     timing = {}
     t0 = time.time()
+    g.tautulli_history_error = None
     
     # Handle model override for API requests
     original_ai_model = getattr(g, 'AI_MODEL', None)
@@ -1543,9 +1631,9 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             if g.AI_PROVIDER == 'gemini':
                 display_model = 'gemini-2.5-flash-lite'  # first in default order
             elif g.AI_PROVIDER == 'mistral':
-                display_model = 'mistral-small'
+                display_model = 'mistral-small-latest'
             elif g.AI_PROVIDER == 'openrouter':
-                display_model = 'anthropic/claude-3-haiku'
+                display_model = 'openrouter/auto'
             else:
                 display_model = 'none'
         
@@ -1574,9 +1662,9 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             if g.AI_PROVIDER == 'gemini':
                 display_model = 'gemini-2.5-flash-lite'  # first in default order
             elif g.AI_PROVIDER == 'mistral':
-                display_model = 'mistral-small'
+                display_model = 'mistral-small-latest'
             elif g.AI_PROVIDER == 'openrouter':
-                display_model = 'anthropic/claude-3-haiku'
+                display_model = 'openrouter/auto'
             else:
                 display_model = 'none'
         
@@ -1747,8 +1835,15 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                 selection_desc = f"Best of {decade_label}"
             elif genre_label:
                 selection_desc = f"Best of {genre_label}"
-    if not g.GOOGLE_API_KEY:
-        gemini_recs['error'] = 'GOOGLE_API_KEY is not set in the environment.'
+    provider_key = {
+        'gemini': 'GOOGLE_API_KEY',
+        'mistral': 'MISTRAL_API_KEY',
+        'openrouter': 'OPENROUTER_API_KEY',
+    }.get(g.AI_PROVIDER)
+    if provider_key is None:
+        gemini_recs['error'] = f'Unsupported AI provider: {g.AI_PROVIDER}'
+    elif not g.settings.get(provider_key):
+        gemini_recs['error'] = f'{provider_key} is not configured. Add it in Settings.'
     elif top_shows or top_movies or mode == 'custom':
         import json as pyjson
         
@@ -1898,16 +1993,22 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             # Try a shortlist of commonly available models with the new google-genai SDK
             gemini_recs['ai_endpoint'] = 'https://generativelanguage.googleapis.com/v1beta/models'
             # Preferred model order. Allow override via GEMINI_MODEL (.env) and prioritize requested 2.5 flash lite.
-            default_order = ['gemini-2.5-flash-lite', 'gemini-2.0-flash-001']
+            default_order = ['gemini-2.5-flash-lite', 'gemini-2.5-flash']
             print(f"DEBUG: g.AI_MODEL = {getattr(g, 'AI_MODEL', 'NOT SET')}")
             print(f"DEBUG: g.GEMINI_MODEL = {getattr(g, 'GEMINI_MODEL', 'NOT SET')}")
             if getattr(g, 'GEMINI_MODEL', ''):
                 # Put user-specified model first if provided.
                 user_model = g.GEMINI_MODEL
                 # Ensure no duplicates while preserving order.
-                tried_models = [user_model] + [m for m in default_order if m != user_model]
+                tried_models = [user_model]
             else:
-                tried_models = default_order
+                try:
+                    available = [model['id'] for model in get_provider_models('gemini')]
+                    stable = [model for model in available if not any(part in model for part in ('preview', 'experimental', '-exp'))]
+                    candidates = stable or available
+                    tried_models = sorted(candidates, key=lambda model: ('flash-lite' in model, 'flash' in model, model), reverse=True)[:3]
+                except ValueError:
+                    tried_models = default_order
             gemini_recs['available_models'] = tried_models
             print(f"DEBUG: Trying models in order: {tried_models}")
             client = getattr(g, 'genai_client', None)
@@ -1960,6 +2061,8 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                         )
                         # Snapshot today's usage for this model
                         gemini_recs['usage_today'] = get_usage_today(gemini_recs.get('model_used') or model_name)
+                        gemini_recs['error'] = None
+                        last_err = None
                         break
                     except Exception as e:
                         last_err = e
@@ -1972,12 +2075,13 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
             # Legacy SDK fallback
             gemini_recs['ai_endpoint'] = 'https://generativelanguage.googleapis.com/v1beta/models'
             try:
-                model = genai.GenerativeModel('gemini-pro')
+                model_name = g.AI_MODEL or 'gemini-2.5-flash-lite'
+                model = genai.GenerativeModel(model_name)
                 response = model.generate_content(prompt)
                 content = getattr(response, 'text', None)
                 gemini_recs['raw_response'] = content
                 # Capture model and usage
-                gemini_recs['model_used'] = 'gemini-pro'
+                gemini_recs['model_used'] = model_name
                 usage_meta = getattr(response, 'usage_metadata', None)
                 usage = None
                 if usage_meta is not None:
@@ -2009,14 +2113,14 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                 # Record usage locally for daily tracking
                 ut = gemini_recs.get('usage') or {}
                 record_usage(
-                    gemini_recs.get('model_used') or 'gemini-pro',
+                    gemini_recs.get('model_used') or model_name,
                     ut.get('prompt_token_count'),
                     ut.get('candidates_token_count'),
                     ut.get('total_token_count'),
                 )
                 # Snapshot today's usage for this model
-                gemini_recs['usage_today'] = get_usage_today(gemini_recs.get('model_used') or 'gemini-pro')
-                gemini_recs['available_models'] = ['gemini-pro']
+                gemini_recs['usage_today'] = get_usage_today(model_name)
+                gemini_recs['available_models'] = [model_name]
             except Exception as e:
                 gemini_recs['error'] = f"Legacy Gemini request failed: {e}"
         elif g.AI_PROVIDER == 'mistral':
@@ -2031,7 +2135,7 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                 }
                 
                 # Default model selection for Mistral
-                model_name = g.AI_MODEL or "mistral-small"
+                model_name = g.AI_MODEL or "mistral-small-latest"
                 
                 data = {
                     "model": model_name,
@@ -2095,7 +2199,7 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                 }
                 
                 # Default model selection for OpenRouter
-                model_name = g.AI_MODEL or "anthropic/claude-3-haiku"
+                model_name = g.AI_MODEL or "openrouter/auto"
                 
                 data = {
                     "model": model_name,
@@ -2146,8 +2250,16 @@ def recommend_for_user(user_id, mode='history', decade_code=None, genre_code=Non
                 gemini_recs['error'] = f"OpenRouter request failed: {e}"
                 
         else:
-            gemini_recs['error'] = f"Unsupported AI provider: {g.AI_PROVIDER}"
-    
+            gemini_recs['error'] = 'Gemini client is unavailable. Install or update google-genai and check your API key in Settings.'
+    else:
+        gemini_recs['error'] = getattr(g, 'tautulli_history_error', None) or 'No watch history was found in the last year for the selected libraries. Try Custom mode or check the library selection.'
+
+    if not isinstance(ai_recommended, dict) or not all(isinstance(ai_recommended.get(key, []), list) for key in ('shows', 'movies', 'categories')):
+        gemini_recs['error'] = gemini_recs['error'] or 'AI response has an invalid format. Expected lists of shows, movies, and categories.'
+        ai_recommended = {'shows': [], 'movies': [], 'categories': []}
+    if not gemini_recs['error'] and not (ai_recommended.get('shows') or ai_recommended.get('movies')):
+        gemini_recs['error'] = 'The AI provider returned no recommendations. Try another model or selection.'
+
     timing[f'{g.AI_PROVIDER}_{gemini_recs.get("model_used", "unknown")}'] = time.time() - t4
 
     # Step 6: AI parse
@@ -3190,7 +3302,16 @@ def recommendations():
     
     # Generate recommendations
     try:
-        recs = recommend_for_user(selected_user_id, mode=mode, decade_code=decade_code, genre_code=genre_code, mood_code=mood_code, requested_model=model)
+        # Serve cached recommendations for history mode if available
+        if mode == 'history' and not model:
+            cached = recommendation_store.get_cached_recommendations(selected_user_id)
+            if cached:
+                recs = cached
+                recs['_from_cache'] = True
+            else:
+                recs = recommend_for_user(selected_user_id, mode=mode, decade_code=decade_code, genre_code=genre_code, mood_code=mood_code, requested_model=model)
+        else:
+            recs = recommend_for_user(selected_user_id, mode=mode, decade_code=decade_code, genre_code=genre_code, mood_code=mood_code, requested_model=model)
         
         if format_type == 'html':
             # Return HTML format using the mobile template for API consumers
@@ -3204,6 +3325,9 @@ def recommendations():
                                  mood_selected=mood_code)
         else:
             # Return JSON format (default)
+            ai_error = (recs.get('debug') or {}).get('ai_error')
+            if ai_error:
+                return jsonify({**recs, 'error': ai_error}), 502
             return jsonify(recs)
             
     except Exception as e:
@@ -3222,8 +3346,9 @@ def index():
         missing.append('PLEX_URL')
     if not g.PLEX_TOKEN:
         missing.append('PLEX_TOKEN')
-    if not g.GOOGLE_API_KEY:
-        missing.append('GOOGLE_API_KEY')
+    provider_key = {'gemini': 'GOOGLE_API_KEY', 'mistral': 'MISTRAL_API_KEY', 'openrouter': 'OPENROUTER_API_KEY'}.get(g.AI_PROVIDER)
+    if provider_key and not g.settings.get(provider_key):
+        missing.append(provider_key)
     if missing:
         # In user mode, settings are hidden; don't redirect to settings.
         if not getattr(g, 'USER_MODE', False):
@@ -3331,7 +3456,16 @@ def index():
                             debug_info['error'] = f'No filters selected. Received - decade: "{form_decade}", genre: "{form_genre}", mood: "{form_mood}"'
                         else:
                             refresh_user_cache_if_changed()
-                            recs = recommend_for_user(user_id, mode=form_mode, decade_code=decade_int, genre_code=(form_genre or None), mood_code=form_mood, requested_model=form_model)
+                            # Serve cached recommendations for history mode if available
+                            if form_mode == 'history' and not form_model:
+                                cached = recommendation_store.get_cached_recommendations(user_id)
+                                if cached:
+                                    recs = cached
+                                    recs['_from_cache'] = True
+                                else:
+                                    recs = recommend_for_user(user_id, mode=form_mode, decade_code=decade_int, genre_code=(form_genre or None), mood_code=form_mood, requested_model=form_model)
+                            else:
+                                recs = recommend_for_user(user_id, mode=form_mode, decade_code=decade_int, genre_code=(form_genre or None), mood_code=form_mood, requested_model=form_model)
                             if recs['history_count'] == 0:
                                 debug_info['note'] = 'No watch history found for this user.'
                     else:
@@ -3373,7 +3507,16 @@ def index():
                     debug_info['error'] = f'No filters selected. Received - decade: "{form_decade}", genre: "{form_genre}", mood: "{form_mood}"'
                 else:
                     refresh_user_cache_if_changed()
-                    recs = recommend_for_user(user_id, mode=form_mode, decade_code=decade_int, genre_code=(form_genre or None), mood_code=form_mood, requested_model=form_model)
+                    # Serve cached recommendations for history mode if available
+                    if form_mode == 'history' and not form_model:
+                        cached = recommendation_store.get_cached_recommendations(user_id)
+                        if cached:
+                            recs = cached
+                            recs['_from_cache'] = True
+                        else:
+                            recs = recommend_for_user(user_id, mode=form_mode, decade_code=decade_int, genre_code=(form_genre or None), mood_code=form_mood, requested_model=form_model)
+                    else:
+                        recs = recommend_for_user(user_id, mode=form_mode, decade_code=decade_int, genre_code=(form_genre or None), mood_code=form_mood, requested_model=form_model)
                     if recs['history_count'] == 0:
                         debug_info['note'] = 'No watch history found for this user.'
     else:
@@ -3631,6 +3774,8 @@ def settings_page():
             'PLEX_URL': request.form.get('PLEX_URL', '').strip(),
             'PLEX_TOKEN': request.form.get('PLEX_TOKEN', '').strip(),
             'SELECTED_LIBRARIES': request.form.getlist('SELECTED_LIBRARIES'),  # Get list of selected library keys
+            'REC_SCHEDULE_TIME': request.form.get('REC_SCHEDULE_TIME', '03:00').strip(),
+            'REC_SCHEDULER_ENABLED': request.form.get('REC_SCHEDULER_ENABLED', '0').strip(),
         }
         # Collect chosen library IDs from multi-select checkboxes
     # Library inclusion filter removed
@@ -3682,7 +3827,8 @@ def settings_page():
         if not errors and new_settings.get('TAUTULLI_DB_PATH'):
             ok_db, err_db = test_tautulli_db(new_settings['TAUTULLI_DB_PATH'])
             if not ok_db:
-                errors.append(f"Tautulli DB path invalid: {err_db}")
+                app.logger.warning('Optional Tautulli database unavailable; using the API: %s', err_db)
+                new_settings['TAUTULLI_DB_PATH'] = ''
         # Validate quotas JSON if provided
         if not errors and new_settings.get('AI_DAILY_QUOTAS'):
             try:
@@ -3705,6 +3851,14 @@ def settings_page():
         else:
             ok, err = save_settings(new_settings)
             if ok:
+                # Apply scheduler changes immediately
+                try:
+                    if str(new_settings.get('REC_SCHEDULER_ENABLED', '0')) == '1':
+                        start_scheduler(new_settings.get('REC_SCHEDULE_TIME', '03:00'))
+                    else:
+                        stop_scheduler()
+                except Exception as sched_err:
+                    print(f"[Scheduler] Error applying scheduler settings: {sched_err}")
                 message = '✅ Settings Saved Successfully! Redirecting now....'
                 message_type = 'success'
                 # Show message for 2 seconds, then redirect
@@ -3718,8 +3872,9 @@ def settings_page():
         missing.append('TAUTULLI_URL')
     if not settings['TAUTULLI_API_KEY']:
         missing.append('TAUTULLI_API_KEY')
-    if not settings['GOOGLE_API_KEY']:
-        missing.append('GOOGLE_API_KEY')
+    provider_key = {'gemini': 'GOOGLE_API_KEY', 'mistral': 'MISTRAL_API_KEY', 'openrouter': 'OPENROUTER_API_KEY'}.get(settings.get('AI_PROVIDER', 'gemini'))
+    if provider_key and not settings.get(provider_key):
+        missing.append(provider_key)
     # DB path is optional; try to infer default
     # Build a simple feature summary map for template clarity
     feature_summary = []
@@ -3730,10 +3885,11 @@ def settings_page():
     _feat('High-quality Posters & Metadata (TMDb)', bool(settings.get('TMDB_API_KEY')), 'Adds TMDb posters, overview, runtime & ratings.')
     _feat('Direct Overseerr Deep Links', bool(settings.get('OVERSEERR_URL')), 'Poster clicks open within Overseerr UI.')
     _feat('Overseerr Auth Features', bool(settings.get('OVERSEERR_URL') and settings.get('OVERSEERR_API_KEY')), 'Future advanced Overseerr features (requests/status).')
-    _feat('Full Watch History (Tautulli DB)', bool(settings.get('TAUTULLI_DB_PATH') and os.path.exists(settings.get('TAUTULLI_DB_PATH'))), 'Enables full watch history enrichment.')
+    _feat('Full Watch History', bool(settings.get('TAUTULLI_URL') and settings.get('TAUTULLI_API_KEY')), 'Uses the Tautulli API; direct database access is optional.')
     _feat('Enhanced Watch History (Tautulli API)', bool(settings.get('TAUTULLI_URL') and settings.get('TAUTULLI_API_KEY')), 'Access to user viewing patterns and preferences.')
     _feat('Daily AI Quotas Enforcement', bool(settings.get('AI_DAILY_QUOTAS')), 'Limits model calls per day based on JSON map.')
     _feat('Preferred AI Model Override', bool(settings.get('AI_MODEL')), 'Forces specific model when generating recommendations.')
+    _feat('Daily Recommendation Scheduler', str(settings.get('REC_SCHEDULER_ENABLED', '0')) == '1', 'Pre-generates history recommendations for all users daily.')
     # Removed Library Inclusion Filter & Plex Direct Library Source features
     # Fetch libraries for inclusion UI
     
@@ -3754,6 +3910,9 @@ def settings_page():
     # Check if admin
     is_admin = _is_request_localhost(request) and not getattr(g, 'USER_MODE', False)
     
+    # Scheduler status for admin panel
+    sched_status = get_scheduler_status() if is_admin else {}
+
     return render_template('settings.html', 
                          settings=settings, 
                          missing=missing, 
@@ -3763,11 +3922,328 @@ def settings_page():
                          feature_summary=feature_summary,
                          is_admin=is_admin,
                          libraries=libraries,
-                         selected_libraries=selected_libraries)
+                         selected_libraries=selected_libraries,
+                         scheduler_status=sched_status)
+
+
+# ---------------------------------------------------------------------------
+# Daily Recommendation Scheduler
+# ---------------------------------------------------------------------------
+
+_scheduler_thread = None
+_scheduler_running = False
+_scheduler_lock = threading.Lock()
+_scheduler_status = {
+    'running': False,
+    'last_run': None,
+    'last_run_status': None,
+    'last_run_users': 0,
+    'last_run_errors': 0,
+    'next_run': None,
+    'job_in_progress': False,
+    'current_user': None,
+    'progress': 0,
+    'progress_total': 0,
+}
+
+
+def _run_daily_recommendations():
+    """Generate history-based recommendations for every active user and cache them."""
+    global _scheduler_status
+    _scheduler_status['job_in_progress'] = True
+    _scheduler_status['progress'] = 0
+    _scheduler_status['current_user'] = None
+    errors = 0
+    processed = 0
+
+    print("[Scheduler] Starting daily recommendation generation...")
+    recommendation_store.set_scheduler_state('last_run_start', datetime.utcnow().isoformat())
+
+    try:
+        # We need a Flask app context to use g, get_settings, etc.
+        with app.app_context():
+            # Load settings into g manually (normally done by before_request)
+            settings = get_settings()
+            g.settings = settings
+            g.TAUTULLI_URL = settings.get('TAUTULLI_URL', '')
+            g.TAUTULLI_API_KEY = settings.get('TAUTULLI_API_KEY', '')
+            g.GOOGLE_API_KEY = settings.get('GOOGLE_API_KEY', '')
+            g.TAUTULLI_DB_PATH = settings.get('TAUTULLI_DB_PATH', '')
+            g.use_tautulli_db = bool(g.TAUTULLI_DB_PATH and os.path.exists(g.TAUTULLI_DB_PATH))
+            g.TMDB_API_KEY = settings.get('TMDB_API_KEY', '')
+            g.OVERSEERR_URL = (settings.get('OVERSEERR_URL', '') or '').rstrip('/')
+            g.OVERSEERR_API_KEY = settings.get('OVERSEERR_API_KEY', '')
+            g.GEMINI_MODEL = settings.get('GEMINI_MODEL', '').strip()
+            g.PLEX_URL = (settings.get('PLEX_URL', '') or '').rstrip('/')
+            g.PLEX_TOKEN = settings.get('PLEX_TOKEN', '').strip()
+            g.SELECTED_LIBRARIES = settings.get('SELECTED_LIBRARIES', [])
+            if isinstance(g.SELECTED_LIBRARIES, str):
+                g.SELECTED_LIBRARIES = [lib.strip() for lib in g.SELECTED_LIBRARIES.split(',') if lib.strip()]
+            g.TAUTULLI_INCLUDE_LIBRARIES = set()
+            g.AI_PROVIDER = settings.get('AI_PROVIDER', 'gemini')
+            g.AI_MODEL = settings.get('AI_MODEL', '').strip()
+            g.AI_DAILY_QUOTAS = {}
+            try:
+                raw_q = settings.get('AI_DAILY_QUOTAS')
+                if raw_q:
+                    g.AI_DAILY_QUOTAS = json.loads(raw_q)
+            except Exception:
+                g.AI_DAILY_QUOTAS = {}
+            # Backward compat
+            if not settings.get('AI_PROVIDER') and settings.get('GOOGLE_API_KEY'):
+                g.AI_PROVIDER = 'gemini'
+            if not settings.get('AI_MODEL') and settings.get('GEMINI_MODEL'):
+                g.AI_MODEL = settings.get('GEMINI_MODEL', '').strip()
+            if not g.AI_DAILY_QUOTAS and settings.get('GEMINI_DAILY_QUOTAS'):
+                try:
+                    g.AI_DAILY_QUOTAS = json.loads(settings.get('GEMINI_DAILY_QUOTAS', '{}'))
+                except Exception:
+                    g.AI_DAILY_QUOTAS = {}
+            # Init AI clients
+            g.genai_client = None
+            g.genai_sdk = None
+            if g.AI_PROVIDER == 'gemini' and settings.get('GOOGLE_API_KEY'):
+                g.GOOGLE_API_KEY = settings['GOOGLE_API_KEY']
+                if genai is not None:
+                    try:
+                        if _GENAI_SDK == 'new':
+                            g.genai_client = genai.Client(api_key=g.GOOGLE_API_KEY)
+                            g.genai_sdk = 'new'
+                        elif _GENAI_SDK == 'legacy':
+                            genai.configure(api_key=g.GOOGLE_API_KEY)
+                            g.genai_client = 'legacy'
+                            g.genai_sdk = 'legacy'
+                    except Exception:
+                        pass
+            elif g.AI_PROVIDER == 'mistral' and settings.get('MISTRAL_API_KEY'):
+                g.MISTRAL_API_KEY = settings['MISTRAL_API_KEY']
+            elif g.AI_PROVIDER == 'openrouter' and settings.get('OPENROUTER_API_KEY'):
+                g.OPENROUTER_API_KEY = settings['OPENROUTER_API_KEY']
+            g.GOOGLE_API_KEY = settings.get('GOOGLE_API_KEY', '')
+            g.GEMINI_MODEL = g.AI_MODEL
+            g.GEMINI_DAILY_QUOTAS = g.AI_DAILY_QUOTAS
+
+            # Fetch users
+            users = _fetch_users_raw()
+            if not users:
+                print("[Scheduler] No users found, aborting run.")
+                _scheduler_status.update({
+                    'job_in_progress': False,
+                    'last_run': datetime.utcnow().isoformat(),
+                    'last_run_status': 'no_users',
+                    'last_run_users': 0,
+                    'last_run_errors': 0,
+                })
+                return
+
+            _scheduler_status['progress_total'] = len(users)
+
+            for idx, user in enumerate(users):
+                uid = str(user.get('user_id', ''))
+                uname = user.get('username') or user.get('friendly_name') or uid
+                if not uid:
+                    continue
+
+                _scheduler_status['current_user'] = uname
+                _scheduler_status['progress'] = idx
+
+                try:
+                    print(f"[Scheduler] Generating recommendations for {uname} ({uid}) [{idx+1}/{len(users)}]...")
+                    recs = recommend_for_user(uid, mode='history')
+
+                    # Only store if we got actual recommendations
+                    if recs and (recs.get('ai_shows') or recs.get('ai_movies')):
+                        recommendation_store.store_recommendations(uid, recs)
+                        print(f"[Scheduler]   -> Stored {len(recs.get('ai_shows', []))} shows, {len(recs.get('ai_movies', []))} movies for {uname}")
+                    else:
+                        print(f"[Scheduler]   -> No recommendations generated for {uname} (empty history or AI error)")
+                        if recs and recs.get('debug', {}).get('ai_error'):
+                            print(f"[Scheduler]      AI error: {recs['debug']['ai_error']}")
+                    processed += 1
+
+                except Exception as e:
+                    print(f"[Scheduler]   -> ERROR for {uname}: {e}")
+                    errors += 1
+
+                # Small delay between users to avoid rate-limiting
+                time.sleep(2)
+
+    except Exception as e:
+        print(f"[Scheduler] Fatal error during recommendation run: {e}")
+        errors += 1
+    finally:
+        _scheduler_status.update({
+            'job_in_progress': False,
+            'last_run': datetime.utcnow().isoformat(),
+            'last_run_status': 'completed' if errors == 0 else f'completed_with_{errors}_errors',
+            'last_run_users': processed,
+            'last_run_errors': errors,
+            'current_user': None,
+            'progress': processed,
+        })
+        recommendation_store.set_scheduler_state('last_run', datetime.utcnow().isoformat())
+        recommendation_store.set_scheduler_state('last_run_users', str(processed))
+        recommendation_store.set_scheduler_state('last_run_errors', str(errors))
+        # Cleanup old entries
+        try:
+            recommendation_store.cleanup_old(days=7)
+        except Exception:
+            pass
+        print(f"[Scheduler] Finished: {processed} users processed, {errors} errors.")
+
+
+def _scheduler_loop():
+    """Background thread: runs the `schedule` library event loop."""
+    global _scheduler_running
+    while _scheduler_running:
+        schedule_lib.run_pending()
+        time.sleep(30)  # check every 30s
+
+
+def start_scheduler(schedule_time: str = '03:00'):
+    """Start (or restart) the daily recommendation scheduler at *schedule_time* (HH:MM)."""
+    global _scheduler_thread, _scheduler_running, _scheduler_status
+    with _scheduler_lock:
+        stop_scheduler()  # clear any existing
+        schedule_lib.clear()
+        schedule_lib.every().day.at(schedule_time).do(
+            lambda: threading.Thread(target=_run_daily_recommendations, daemon=True).start()
+        )
+        _scheduler_running = True
+        _scheduler_status['next_run'] = schedule_time
+        _scheduler_thread = threading.Thread(target=_scheduler_loop, daemon=True)
+        _scheduler_thread.start()
+        recommendation_store.set_scheduler_state('enabled', '1')
+        recommendation_store.set_scheduler_state('schedule_time', schedule_time)
+        print(f"[Scheduler] Started. Will run daily at {schedule_time}.")
+
+
+def stop_scheduler():
+    """Stop the scheduler background thread."""
+    global _scheduler_thread, _scheduler_running, _scheduler_status
+    _scheduler_running = False
+    schedule_lib.clear()
+    if _scheduler_thread and _scheduler_thread.is_alive():
+        _scheduler_thread.join(timeout=5)
+    _scheduler_thread = None
+    _scheduler_status['next_run'] = None
+    recommendation_store.set_scheduler_state('enabled', '0')
+    print("[Scheduler] Stopped.")
+
+
+def get_scheduler_status() -> dict:
+    """Return a snapshot of the scheduler status for UI display."""
+    # Merge runtime status with persisted state
+    status = dict(_scheduler_status)
+    status['scheduler_enabled'] = _scheduler_running
+    # Fill from DB if runtime lost (e.g. after restart before first run)
+    if not status.get('last_run'):
+        status['last_run'] = recommendation_store.get_scheduler_state('last_run')
+    if not status.get('last_run_users'):
+        try:
+            status['last_run_users'] = int(recommendation_store.get_scheduler_state('last_run_users') or 0)
+        except Exception:
+            status['last_run_users'] = 0
+    if not status.get('last_run_errors'):
+        try:
+            status['last_run_errors'] = int(recommendation_store.get_scheduler_state('last_run_errors') or 0)
+        except Exception:
+            status['last_run_errors'] = 0
+    status['cached_user_count'] = len(recommendation_store.get_all_cached_users())
+    return status
+
+
+# Auto-start scheduler on boot if previously enabled
+def _auto_start_scheduler():
+    try:
+        settings = get_settings()
+        enabled = settings.get('REC_SCHEDULER_ENABLED', '0')
+        sched_time = settings.get('REC_SCHEDULE_TIME', '03:00')
+        if str(enabled) == '1':
+            start_scheduler(sched_time)
+    except Exception as e:
+        print(f"[Scheduler] Auto-start failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# Scheduler API routes (admin / localhost only)
+# ---------------------------------------------------------------------------
+
+@app.route('/api/scheduler/status')
+def api_scheduler_status():
+    if not _is_request_localhost(request):
+        return abort(403)
+    return jsonify(get_scheduler_status())
+
+
+@app.route('/api/scheduler/start', methods=['POST'])
+def api_scheduler_start():
+    if not _is_request_localhost(request):
+        return abort(403)
+    data = request.get_json(silent=True) or {}
+    sched_time = data.get('time', '03:00')
+    # Validate HH:MM format
+    try:
+        parts = sched_time.split(':')
+        h, m = int(parts[0]), int(parts[1])
+        if not (0 <= h <= 23 and 0 <= m <= 59):
+            raise ValueError()
+        sched_time = f"{h:02d}:{m:02d}"
+    except Exception:
+        return jsonify({'error': 'Invalid time format. Use HH:MM (24h).'}), 400
+    # Save to settings
+    save_settings({'REC_SCHEDULE_TIME': sched_time, 'REC_SCHEDULER_ENABLED': '1'})
+    start_scheduler(sched_time)
+    return jsonify({'status': 'started', 'time': sched_time})
+
+
+@app.route('/api/scheduler/stop', methods=['POST'])
+def api_scheduler_stop():
+    if not _is_request_localhost(request):
+        return abort(403)
+    save_settings({'REC_SCHEDULER_ENABLED': '0'})
+    stop_scheduler()
+    return jsonify({'status': 'stopped'})
+
+
+@app.route('/api/scheduler/trigger', methods=['POST'])
+def api_scheduler_trigger():
+    """Manually trigger a recommendation run now."""
+    if not _is_request_localhost(request):
+        return abort(403)
+    if _scheduler_status.get('job_in_progress'):
+        return jsonify({'error': 'A job is already in progress.'}), 409
+    threading.Thread(target=_run_daily_recommendations, daemon=True).start()
+    return jsonify({'status': 'triggered'})
+
+
+@app.route('/api/scheduler/clear', methods=['POST'])
+def api_scheduler_clear():
+    """Clear all cached recommendations."""
+    if not _is_request_localhost(request):
+        return abort(403)
+    recommendation_store.delete_all_cached()
+    return jsonify({'status': 'cleared'})
+
+
+@app.route('/api/cached_recommendations')
+def api_cached_recommendations():
+    """Get cached recommendations for a user (if available)."""
+    user_id = request.args.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'user_id required'}), 400
+    cached = recommendation_store.get_cached_recommendations(user_id)
+    if not cached:
+        return jsonify({'error': 'No cached recommendations found', 'cached': False}), 404
+    return jsonify(cached)
+
 
 # Save TMDb cache on shutdown
 import atexit
 atexit.register(_save_tmdb_cache)
+
+# Auto-start the scheduler after app is configured
+_auto_start_scheduler()
 
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=2665, debug=True)

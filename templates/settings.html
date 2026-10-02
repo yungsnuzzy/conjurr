@@ -209,11 +209,11 @@
                 <div class="hint">Generate in Tautulli: Settings → Web Interface → API.</div>
             </div>
             <div class="field" style="grid-column:1 / -1;">
-                <label for="TAUTULLI_DB_PATH">Tautulli Database Path</label>
-                <input type="text" id="TAUTULLI_DB_PATH" name="TAUTULLI_DB_PATH" value="{{ settings.TAUTULLI_DB_PATH }}" placeholder="e.g. %LOCALAPPDATA%/Tautulli/Tautulli.db">
-                <div class="hint">Enables full watch history + faster library availability. Auto-detected on Windows if left blank.</div>
+                <label for="TAUTULLI_DB_PATH">Tautulli Database Path <span class="inline-badge">Optional</span></label>
+                <input type="text" id="TAUTULLI_DB_PATH" name="TAUTULLI_DB_PATH" value="{{ settings.TAUTULLI_DB_PATH }}" placeholder="Leave blank for API-only access">
+                <div class="hint">Optional local path. Leave blank when Tautulli runs on another machine or in Docker.</div>
                 <input style="margin-top:10px" type="file" id="TAUTULLI_DB_FILE" name="TAUTULLI_DB_FILE" accept=".db,.sqlite,.sqlite3">
-                <div class="hint">Upload a copy if remote. Refresh periodically to reflect new items.</div>
+                <div class="hint">Optional database copy. The Tautulli API works without an upload.</div>
             </div>
         </div>
 
@@ -232,36 +232,9 @@
             <div class="field">
                 <label for="AI_MODEL">AI Model</label>
                 <select id="AI_MODEL" name="AI_MODEL" style="width:100%; padding:12px 14px 11px; background:#141414; color:#ffe89c; border:1px solid #353535; border-radius:8px; font-size:0.95rem; font-family:inherit; transition:all 0.2s ease;">
-                    <option value="" {% if not settings.AI_MODEL %}selected{% endif %}>Auto-select (Recommended)</option>
-                    <!-- Gemini Models -->
-                    <optgroup label="Google Gemini" id="gemini-models" {% if settings.AI_PROVIDER != 'gemini' and settings.AI_PROVIDER %}style="display:none;"{% endif %}>
-                        <option value="gemini-2.5-flash-lite" {% if settings.AI_MODEL == 'gemini-2.5-flash-lite' %}selected{% endif %}>Gemini 2.5 Flash Lite</option>
-                        <option value="gemini-2.5-flash" {% if settings.AI_MODEL == 'gemini-2.5-flash' %}selected{% endif %}>Gemini 2.5 Flash</option>
-                        <option value="gemini-2.5-pro" {% if settings.AI_MODEL == 'gemini-2.5-pro' %}selected{% endif %}>Gemini 2.5 Pro</option>
-                        <option value="gemini-1.5-flash" {% if settings.AI_MODEL == 'gemini-1.5-flash' %}selected{% endif %}>Gemini 1.5 Flash</option>
-                        <option value="gemini-1.5-pro" {% if settings.AI_MODEL == 'gemini-1.5-pro' %}selected{% endif %}>Gemini 1.5 Pro</option>
-                        <option value="gemini-pro" {% if settings.AI_MODEL == 'gemini-pro' %}selected{% endif %}>Gemini Pro</option>
-                    </optgroup>
-                    <!-- Mistral Models -->
-                    <optgroup label="Mistral AI (Free)" id="mistral-models" {% if settings.AI_PROVIDER != 'mistral' %}style="display:none;"{% endif %}>
-                        <option value="mistral-small" {% if settings.AI_MODEL == 'mistral-small' %}selected{% endif %}>Mistral Small (Free)</option>
-                        <option value="mistral-tiny" {% if settings.AI_MODEL == 'mistral-tiny' %}selected{% endif %}>Mistral Tiny (Free)</option>
-                    </optgroup>
-                    <optgroup label="Mistral AI (Paid)" id="mistral-paid-models" {% if settings.AI_PROVIDER != 'mistral' %}style="display:none;"{% endif %}>
-                        <option value="mistral-medium" {% if settings.AI_MODEL == 'mistral-medium' %}selected{% endif %}>Mistral Medium</option>
-                        <option value="mistral-large-latest" {% if settings.AI_MODEL == 'mistral-large-latest' %}selected{% endif %}>Mistral Large (Latest)</option>
-                    </optgroup>
-                    <!-- OpenRouter Models -->
-                    <optgroup label="OpenRouter" id="openrouter-models" {% if settings.AI_PROVIDER != 'openrouter' %}style="display:none;"{% endif %}>
-                        <option value="anthropic/claude-3-haiku" {% if settings.AI_MODEL == 'anthropic/claude-3-haiku' %}selected{% endif %}>Claude 3 Haiku</option>
-                        <option value="anthropic/claude-3-sonnet" {% if settings.AI_MODEL == 'anthropic/claude-3-sonnet' %}selected{% endif %}>Claude 3 Sonnet</option>
-                        <option value="anthropic/claude-3-opus" {% if settings.AI_MODEL == 'anthropic/claude-3-opus' %}selected{% endif %}>Claude 3 Opus</option>
-                        <option value="openai/gpt-4o-mini" {% if settings.AI_MODEL == 'openai/gpt-4o-mini' %}selected{% endif %}>GPT-4o Mini</option>
-                        <option value="openai/gpt-4o" {% if settings.AI_MODEL == 'openai/gpt-4o' %}selected{% endif %}>GPT-4o</option>
-                        <option value="openai/gpt-4-turbo" {% if settings.AI_MODEL == 'openai/gpt-4-turbo' %}selected{% endif %}>GPT-4 Turbo</option>
-                        <option value="meta-llama/llama-3.1-8b-instruct" {% if settings.AI_MODEL == 'meta-llama/llama-3.1-8b-instruct' %}selected{% endif %}>Llama 3.1 8B</option>
-                        <option value="meta-llama/llama-3.1-70b-instruct" {% if settings.AI_MODEL == 'meta-llama/llama-3.1-70b-instruct' %}selected{% endif %}>Llama 3.1 70B</option>
-                    </optgroup>
+                    {% set current_model = settings.AI_MODEL %}
+                    {% set model_default_label = 'Auto-select (Recommended)' %}
+                    {% include 'model_options.html' %}
                 </select>
                 <div class="hint">Choose a specific model or leave as auto-select for optimal performance.</div>
             </div>
@@ -309,6 +282,72 @@
                 <div class="hint">Not required for deep links; enables potential future authenticated Overseerr features.</div>
             </div>
         </div>
+
+        {% if is_admin %}
+        <h3>Recommendation Scheduler <span class="inline-badge">Admin</span></h3>
+        <div class="field" style="margin-top: 8px;">
+            <div class="hint" style="margin-bottom: 12px;">Pre-generate history-based recommendations for all users once daily. Cached results are served instantly and cleaned up after 7 days.</div>
+            <div class="grid">
+                <div class="field">
+                    <label for="REC_SCHEDULE_TIME">Daily Run Time (24h)</label>
+                    <input type="text" id="REC_SCHEDULE_TIME" name="REC_SCHEDULE_TIME" value="{{ settings.REC_SCHEDULE_TIME or '03:00' }}" placeholder="03:00" pattern="\d{2}:\d{2}" maxlength="5">
+                    <div class="hint">Time in HH:MM (24-hour) when the scheduler runs. Example: <code>03:00</code> for 3 AM.</div>
+                </div>
+                <div class="field">
+                    <label>Scheduler</label>
+                    <div style="display:flex; gap:10px; align-items:center; margin-top:4px;">
+                        <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; cursor:pointer; text-transform:none; letter-spacing:0;">
+                            <input type="radio" name="REC_SCHEDULER_ENABLED" value="1" {% if settings.REC_SCHEDULER_ENABLED == '1' %}checked{% endif %} style="accent-color:#ffc947;">
+                            Enabled
+                        </label>
+                        <label style="display:flex; align-items:center; gap:6px; font-size:0.85rem; cursor:pointer; text-transform:none; letter-spacing:0;">
+                            <input type="radio" name="REC_SCHEDULER_ENABLED" value="0" {% if settings.REC_SCHEDULER_ENABLED != '1' %}checked{% endif %} style="accent-color:#ffc947;">
+                            Disabled
+                        </label>
+                    </div>
+                    <div class="hint">Enable/disable automatic daily recommendation generation.</div>
+                </div>
+            </div>
+            {% if scheduler_status %}
+            <div style="margin-top: 18px; background:#141414; border:1px solid #353535; border-radius:10px; padding:16px 20px;">
+                <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    <span style="font-weight:700; font-size:0.78rem; letter-spacing:0.08em; text-transform:uppercase; color:#ffc94d;">Scheduler Status</span>
+                    {% if scheduler_status.scheduler_enabled %}
+                        <span class="pill ok" style="margin:0;">Active <small>ON</small></span>
+                    {% else %}
+                        <span class="pill no" style="margin:0;">Inactive <small>OFF</small></span>
+                    {% endif %}
+                    {% if scheduler_status.job_in_progress %}
+                        <span class="pill ok" style="margin:0; border-color:#4a7ac7; background:#1b2a40; color:#7ab4ff;">
+                            Running
+                            {% if scheduler_status.current_user %}: {{ scheduler_status.current_user }}{% endif %}
+                            {% if scheduler_status.progress_total %} ({{ scheduler_status.progress }}/{{ scheduler_status.progress_total }}){% endif %}
+                        </span>
+                    {% endif %}
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:8px; font-size:0.72rem; color:#d0c396;">
+                    <div><strong>Next Run:</strong> {{ scheduler_status.next_run or 'Not scheduled' }}</div>
+                    <div><strong>Last Run:</strong> {{ scheduler_status.last_run[:16] if scheduler_status.last_run else 'Never' }}</div>
+                    <div><strong>Users Processed:</strong> {{ scheduler_status.last_run_users or 0 }}</div>
+                    <div><strong>Errors:</strong> {{ scheduler_status.last_run_errors or 0 }}</div>
+                    <div><strong>Cached Users:</strong> {{ scheduler_status.cached_user_count or 0 }}</div>
+                </div>
+                <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+                    <button type="button" id="trigger-scheduler-btn" onclick="triggerScheduler()" style="margin:0; padding:8px 16px; font-size:0.75rem; background:linear-gradient(135deg,#4a7ac7,#3b6db3); color:#fff; border-color:#2d5a9e;">
+                        ▶ Run Now
+                    </button>
+                    <button type="button" id="clear-cache-btn" onclick="clearSchedulerCache()" style="margin:0; padding:8px 16px; font-size:0.75rem; background:linear-gradient(135deg,#c74a4a,#b33b3b); color:#fff; border-color:#9e2d2d;">
+                        🗑 Clear Cache
+                    </button>
+                    <button type="button" id="refresh-status-btn" onclick="refreshSchedulerStatus()" style="margin:0; padding:8px 16px; font-size:0.75rem; background:linear-gradient(135deg,#555,#444); color:#ddd; border-color:#333;">
+                        ↻ Refresh Status
+                    </button>
+                </div>
+                <div id="scheduler-action-msg" style="margin-top:8px; font-size:0.72rem; color:#8aff84; display:none;"></div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
 
         <button type="submit" id="save-btn">Save Settings</button>
 
@@ -378,44 +417,6 @@
             secureField('MISTRAL_API_KEY');
             secureField('OPENROUTER_API_KEY');
             
-            // Handle AI provider and model selection
-            const providerSelect = document.getElementById('AI_PROVIDER');
-            const modelSelect = document.getElementById('AI_MODEL');
-            const geminiModels = document.getElementById('gemini-models');
-            const mistralModels = document.getElementById('mistral-models');
-            const openrouterModels = document.getElementById('openrouter-models');
-            
-            function updateModelOptions() {
-                const selectedProvider = providerSelect.value;
-                
-                // Hide all model groups
-                if (geminiModels) geminiModels.style.display = 'none';
-                if (mistralModels) mistralModels.style.display = 'none';
-                if (openrouterModels) openrouterModels.style.display = 'none';
-                
-                // Show the appropriate model group
-                if (selectedProvider === 'gemini' && geminiModels) {
-                    geminiModels.style.display = 'block';
-                } else if (selectedProvider === 'mistral' && mistralModels) {
-                    mistralModels.style.display = 'block';
-                } else if (selectedProvider === 'openrouter' && openrouterModels) {
-                    openrouterModels.style.display = 'block';
-                }
-                
-                // Reset model selection if current selection is not valid for new provider
-                if (modelSelect && modelSelect.value) {
-                    const selectedOption = modelSelect.querySelector(`option[value="${modelSelect.value}"]`);
-                    if (selectedOption && selectedOption.parentElement.style.display === 'none') {
-                        modelSelect.value = '';
-                    }
-                }
-            }
-            
-            if (providerSelect) {
-                providerSelect.addEventListener('change', updateModelOptions);
-                updateModelOptions(); // Initial call
-            }
-            
             // Enhanced save process with loading overlay
             const saveBtn = document.getElementById('save-btn');
             const saveBtnTop = document.getElementById('save-btn-top');
@@ -463,5 +464,51 @@
             }
         })();
     </script>
+    <script>
+        // Scheduler action buttons
+        function showSchedulerMsg(text, isError) {
+            var el = document.getElementById('scheduler-action-msg');
+            if (!el) return;
+            el.textContent = text;
+            el.style.color = isError ? '#ff8686' : '#8aff84';
+            el.style.display = 'block';
+            setTimeout(function() { el.style.display = 'none'; }, 5000);
+        }
+        function triggerScheduler() {
+            var btn = document.getElementById('trigger-scheduler-btn');
+            if (btn) { btn.disabled = true; btn.textContent = 'Starting...'; }
+            fetch('/api/scheduler/trigger', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    if (d.error) { showSchedulerMsg('Error: ' + d.error, true); }
+                    else { showSchedulerMsg('Recommendation job triggered! Refresh to see progress.', false); }
+                })
+                .catch(function(e) { showSchedulerMsg('Request failed: ' + e, true); })
+                .finally(function() { if (btn) { btn.disabled = false; btn.textContent = '▶ Run Now'; } });
+        }
+        function clearSchedulerCache() {
+            if (!confirm('Clear all cached recommendations?')) return;
+            fetch('/api/scheduler/clear', { method: 'POST' })
+                .then(function(r) { return r.json(); })
+                .then(function(d) { showSchedulerMsg('Cache cleared.', false); })
+                .catch(function(e) { showSchedulerMsg('Request failed: ' + e, true); });
+        }
+        function refreshSchedulerStatus() {
+            fetch('/api/scheduler/status')
+                .then(function(r) { return r.json(); })
+                .then(function(d) {
+                    showSchedulerMsg(
+                        'Status: ' + (d.scheduler_enabled ? 'Active' : 'Inactive') +
+                        ' | Last run: ' + (d.last_run ? d.last_run.substring(0,16) : 'Never') +
+                        ' | Users: ' + (d.last_run_users || 0) +
+                        ' | Cached: ' + (d.cached_user_count || 0) +
+                        (d.job_in_progress ? ' | IN PROGRESS (' + (d.current_user || '...') + ')' : ''),
+                        false
+                    );
+                })
+                .catch(function(e) { showSchedulerMsg('Request failed: ' + e, true); });
+        }
+    </script>
+<script src="{{ url_for('static', filename='model-select.js') }}"></script>
 </body>
 </html>

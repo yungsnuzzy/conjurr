@@ -294,26 +294,10 @@
                     {% if not user_mode %}
                     <div>
                         <label style="font-size:0.9em;display:block;margin-bottom:4px;" for="model">AI Model</label>
-                        <select name="model" id="model" style="padding:6px 8px;min-width:160px;">
-                            <option value="">-- Default --</option>
-                            {% if ai_provider == 'gemini' %}
-                                <option value="gemini-2.5-flash-lite" {% if model_selected=='gemini-2.5-flash-lite' %}selected{% endif %}>Gemini 2.5 Flash Lite</option>
-                                <option value="gemini-2.0-flash-001" {% if model_selected=='gemini-2.0-flash-001' %}selected{% endif %}>Gemini 2.0 Flash</option>
-                                <option value="gemini-1.5-flash" {% if model_selected=='gemini-1.5-flash' %}selected{% endif %}>Gemini 1.5 Flash</option>
-                                <option value="gemini-1.5-pro" {% if model_selected=='gemini-1.5-pro' %}selected{% endif %}>Gemini 1.5 Pro</option>
-                                <option value="gemini-pro" {% if model_selected=='gemini-pro' %}selected{% endif %}>Gemini Pro</option>
-                            {% elif ai_provider == 'mistral' %}
-                                <option value="mistral-small" {% if model_selected=='mistral-small' %}selected{% endif %}>Mistral Small (Free)</option>
-                                <option value="mistral-tiny" {% if model_selected=='mistral-tiny' %}selected{% endif %}>Mistral Tiny (Free)</option>
-                                <option value="mistral-medium" {% if model_selected=='mistral-medium' %}selected{% endif %}>Mistral Medium</option>
-                                <option value="mistral-large-latest" {% if model_selected=='mistral-large-latest' %}selected{% endif %}>Mistral Large</option>
-                            {% elif ai_provider == 'openrouter' %}
-                                <option value="anthropic/claude-3-haiku" {% if model_selected=='anthropic/claude-3-haiku' %}selected{% endif %}>Claude 3 Haiku</option>
-                                <option value="anthropic/claude-3-sonnet" {% if model_selected=='anthropic/claude-3-sonnet' %}selected{% endif %}>Claude 3 Sonnet</option>
-                                <option value="anthropic/claude-3-opus" {% if model_selected=='anthropic/claude-3-opus' %}selected{% endif %}>Claude 3 Opus</option>
-                                <option value="openai/gpt-4o-mini" {% if model_selected=='openai/gpt-4o-mini' %}selected{% endif %}>GPT-4o Mini</option>
-                                <option value="openai/gpt-4o" {% if model_selected=='openai/gpt-4o' %}selected{% endif %}>GPT-4o</option>
-                            {% endif %}
+                        <select name="model" id="model" data-provider="{{ ai_provider }}" style="padding:6px 8px;min-width:160px;">
+                            {% set current_model = model_selected %}
+                            {% set model_default_label = '-- Default --' %}
+                            {% include 'model_options.html' %}
                         </select>
                     </div>
                     {% endif %}
@@ -382,26 +366,10 @@
                     </div>
                     <div>
                         <label style="font-size:0.95em;display:block;margin-bottom:4px;" for="model">AI Model</label>
-                        <select name="model" id="model" style="padding:6px 8px;min-width:160px;">
-                            <option value="">-- Default --</option>
-                            {% if ai_provider == 'gemini' %}
-                                <option value="gemini-2.5-flash-lite" {% if model_selected=='gemini-2.5-flash-lite' %}selected{% endif %}>Gemini 2.5 Flash Lite</option>
-                                <option value="gemini-2.0-flash-001" {% if model_selected=='gemini-2.0-flash-001' %}selected{% endif %}>Gemini 2.0 Flash</option>
-                                <option value="gemini-1.5-flash" {% if model_selected=='gemini-1.5-flash' %}selected{% endif %}>Gemini 1.5 Flash</option>
-                                <option value="gemini-1.5-pro" {% if model_selected=='gemini-1.5-pro' %}selected{% endif %}>Gemini 1.5 Pro</option>
-                                <option value="gemini-pro" {% if model_selected=='gemini-pro' %}selected{% endif %}>Gemini Pro</option>
-                            {% elif ai_provider == 'mistral' %}
-                                <option value="mistral-small" {% if model_selected=='mistral-small' %}selected{% endif %}>Mistral Small (Free)</option>
-                                <option value="mistral-tiny" {% if model_selected=='mistral-tiny' %}selected{% endif %}>Mistral Tiny (Free)</option>
-                                <option value="mistral-medium" {% if model_selected=='mistral-medium' %}selected{% endif %}>Mistral Medium</option>
-                                <option value="mistral-large-latest" {% if model_selected=='mistral-large-latest' %}selected{% endif %}>Mistral Large</option>
-                            {% elif ai_provider == 'openrouter' %}
-                                <option value="anthropic/claude-3-haiku" {% if model_selected=='anthropic/claude-3-haiku' %}selected{% endif %}>Claude 3 Haiku</option>
-                                <option value="anthropic/claude-3-sonnet" {% if model_selected=='anthropic/claude-3-sonnet' %}selected{% endif %}>Claude 3 Sonnet</option>
-                                <option value="anthropic/claude-3-opus" {% if model_selected=='anthropic/claude-3-opus' %}selected{% endif %}>Claude 3 Opus</option>
-                                <option value="openai/gpt-4o-mini" {% if model_selected=='openai/gpt-4o-mini' %}selected{% endif %}>GPT-4o Mini</option>
-                                <option value="openai/gpt-4o" {% if model_selected=='openai/gpt-4o' %}selected{% endif %}>GPT-4o</option>
-                            {% endif %}
+                        <select name="model" id="model" data-provider="{{ ai_provider }}" style="padding:6px 8px;min-width:160px;">
+                            {% set current_model = model_selected %}
+                            {% set model_default_label = '-- Default --' %}
+                            {% include 'model_options.html' %}
                         </select>
                     </div>
                 </div>
@@ -416,6 +384,10 @@
             {% endif %}
         {% endif %}
     </form>
+    {% set recommendation_error = recs.debug.ai_error or recs.debug.error if recs and recs.debug else debug_info.error %}
+    {% if recommendation_error %}
+    <div role="alert" style="color:#ff8888;margin:12px auto;max-width:900px;padding:0 20px;overflow-wrap:anywhere;">{{ recommendation_error }}</div>
+    {% endif %}
     {% if selection_desc %}
     <div style="text-align:center;margin:20px auto 10px auto;padding:0 20px;">
         <div style="color:#ffe066;font-size:1.4em;font-weight:bold;text-shadow:1px 1px 4px #000;">
@@ -888,6 +860,7 @@
         {% endif %}
     </div>
     {% endif %}
+<script src="{{ url_for('static', filename='model-select.js') }}"></script>
 </body>
 <script>
     // Whether the library is currently being built (from server-side state via data attribute)

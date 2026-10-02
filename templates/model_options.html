@@ -1,0 +1,4 @@
+<option value="">{{ model_default_label|default('Auto-select') }}</option>
+{% if current_model %}
+<option value="{{ current_model }}" selected>{{ current_model }}</option>
+{% endif %}

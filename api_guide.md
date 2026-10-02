@@ -40,33 +40,29 @@ Rate limits: None
 
 ## AI Model Selection
 
-### Supported Models by Provider
+### Available Models
 
-#### Gemini (Google AI)
-- `gemini-2.5-flash-lite` - Fast, cost-effective (Default)
-- `gemini-2.0-flash-001` - Balanced performance
-- `gemini-1.5-flash` - Fast responses
-- `gemini-1.5-pro` - Higher quality
-- `gemini-pro` - Legacy high quality
+Settings and the recommendation form load model options from the provider's live catalog.
+Save the provider's API key first, then retrieve current model IDs:
 
-#### Mistral AI
-- `mistral-small` - Fast, cost-effective (Default, Free)
-- `mistral-tiny` - Fastest, basic quality (Free)
-- `mistral-medium` - Better quality
-- `mistral-large-latest` - Highest quality
+```powershell
+Invoke-RestMethod -Uri "http://localhost:2665/api/models?provider=gemini"
+```
 
-#### OpenRouter
-- `anthropic/claude-3-haiku` - Fast, cost-effective (Default)
-- `anthropic/claude-3-sonnet` - Balanced quality
-- `anthropic/claude-3-opus` - Highest quality
-- `openai/gpt-4o-mini` - Fast GPT-4 variant
-- `openai/gpt-4o` - Full GPT-4 quality
+The optional `provider` parameter accepts `gemini`, `mistral`, or `openrouter`;
+omitting it uses the configured provider. The response contains a `models` list
+of objects with `id` and `name` fields. Catalog failures return HTTP 502 with an `error`.
+
+With no configured model, Gemini prefers available stable Flash Lite / Flash models,
+Mistral uses `mistral-small-latest`, and OpenRouter uses `openrouter/auto`.
 
 **Notes:**
 - Model availability depends on your configured AI provider
-- Free models marked where applicable
+- Pricing and quotas are determined by the provider; model selection does not guarantee free access
 - Defaults to your configured model if not specified
-- Invalid models for your provider will fall back to defaults
+- Explicit model choices are honored; an unavailable model reports an error rather than silently switching
+- Passing `model` bypasses the history recommendation cache
+- Empty, failed, or older-than-seven-day cached results are regenerated
 
 ## Examples (PowerShell)
 
@@ -85,13 +81,13 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=j
 ### AI Model Selection
 ```powershell
 # Use specific Gemini model
-Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&model=gemini-1.5-pro"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&model=gemini-2.5-flash"
 
-# Use free Mistral model
-Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user_id=29170859&model=mistral-small"
+# Use the latest Mistral Small model
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user_id=29170859&model=mistral-small-latest"
 
-# Use Claude via OpenRouter
-Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&model=anthropic/claude-3-sonnet"
+# Use automatic routing via OpenRouter
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&model=openrouter/auto"
 
 # Use GPT-4 via OpenRouter
 Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user_id=29170859&model=openai/gpt-4o"
@@ -124,13 +120,13 @@ Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=j
 ### Advanced Examples with Model Selection
 ```powershell
 # High-quality Gemini model for detailed recommendations
-Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&model=gemini-1.5-pro"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&model=gemini-2.5-pro"
 
-# Fast free Mistral model for quick results
-Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user_id=29170859&model=mistral-tiny"
+# Latest Mistral Small model for quick results
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user_id=29170859&model=mistral-small-latest"
 
 # Custom filtering with specific model
-Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&mode=custom&genre=sci-fi&model=anthropic/claude-3-opus"
+Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&mode=custom&genre=sci-fi&model=openrouter/auto"
 
 # Seasonal recommendations with GPT-4
 Invoke-RestMethod -Method Get -Uri "http://localhost:2665/recommendations?user=josh@example.com&mode=custom&mood=seasonal&model=openai/gpt-4o"
@@ -228,7 +224,7 @@ Invoke-WebRequest -Method Get -Uri "http://localhost:2665/recommendations?user=j
 - 400: Invalid mood (must be one of: `underrated`, `surprise me`, `out of my comfort zone`, `comfort food`, `award winners`, `popular (streaming services)`, `seasonal`)
 - 400: Custom mode missing filters (requires `decade`, `genre`, and/or `mood`)
 - 400: Invalid format (must be `json` or `html`)
-- 400: Invalid model (model not available for current AI provider)
+- 502: Recommendation generation failed or was skipped. JSON responses include a top-level `error` and `debug.ai_error`; HTML responses display an alert
 - 500: Internal error (check debug section for details)
 
 ## Getting User Information

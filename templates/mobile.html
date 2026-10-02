@@ -210,6 +210,10 @@
             <button class="primary-cta" type="submit">Get Recommendations</button>
         </form>
 
+        {% set recommendation_error = recs.debug.ai_error or recs.debug.error if recs and recs.debug else debug_info.error %}
+        {% if recommendation_error %}
+        <div class="err" role="alert" style="margin:12px 0;overflow-wrap:anywhere;">{{ recommendation_error }}</div>
+        {% endif %}
         {% if selection_desc %}
         <div style="text-align:center;margin:20px auto 10px auto;padding:0 20px;">
             <div style="color:var(--accent);font-size:1.4em;font-weight:bold;text-shadow:1px 1px 4px #000;">
