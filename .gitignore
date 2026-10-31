@@ -9,3 +9,11 @@ __pycache__/
 @package/
 *.rcfd
 *.rc
+.git
+.github
+node_modules
+__pycache__
+dist
+build
+Dockerfile
+docker-compose.yml

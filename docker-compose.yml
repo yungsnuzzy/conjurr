@@ -1,0 +1,11 @@
+services:
+  myapp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: myapp
+    ports:
+      - "8080:8080"
+    environment:
+      - ENV=production
+    restart: unless-stopped

@@ -433,26 +433,34 @@ class PlexClient:
             return False
     
     def get_libraries(self):
-        """Get all library sections"""
         if self._libraries_cache is not None:
             return self._libraries_cache
-            
+
         try:
-            r = requests.get(f"{self.base_url}/library/sections", headers=self.headers, timeout=10)
+            r = requests.get(
+                f"{self.base_url}/library/sections",
+                headers=self.headers,
+                timeout=10
+            )
             if r.status_code == 200:
-                data = r.json()
+                from xml.etree import ElementTree as ET
+                root = ET.fromstring(r.content)
+
                 libraries = []
-                for section in data.get('MediaContainer', {}).get('Directory', []):
-                    if section.get('type') in ['movie', 'show']:
+                for section in root.findall('.//Directory'):
+                    section_type = section.get('type')
+                    if section_type in ['movie', 'show']:
                         libraries.append({
                             'key': section.get('key'),
                             'title': section.get('title'),
-                            'type': section.get('type')
+                            'type': section_type
                         })
+
                 self._libraries_cache = libraries
                 return libraries
         except Exception as e:
             print(f"Error getting Plex libraries: {e}")
+
         return []
     
     def check_availability_for_items(self, items, media_type, selected_libraries=None):
@@ -3746,14 +3754,35 @@ def settings_page():
         try:
             if not url or not token:
                 return False, 'Plex URL and Token are required'
-            
-            # Test connection using same logic as PlexClient
-            headers = {'X-Plex-Token': token}
-            resp = requests.get(f"{url}/identity", headers=headers, timeout=10)
-            if resp.status_code == 200:
-                return True, None
+
+            url = url.rstrip('/')
+
+            headers = {
+                'X-Plex-Token': token,
+                'Accept': 'application/xml',
+                'X-Plex-Product': 'Conjurr',
+                'X-Plex-Client-Identifier': 'conjurr-settings-test',
+            }
+
+            session = requests.Session()
+
+            try:
+                resp = session.get(f"{url}/", headers=headers, timeout=10, allow_redirects=True)
+                if resp.status_code == 200 and ('MediaContainer' in resp.text or 'machineIdentifier' in resp.text):
+                    return True, None
+            except requests.exceptions.RequestException as e:
+                root_err = str(e)
             else:
-                return False, f"HTTP {resp.status_code}: {resp.text[:100]}"
+                root_err = f"HTTP {resp.status_code}: {resp.text[:200]}"
+
+            try:
+                resp = session.get(f"{url}/identity", headers=headers, timeout=10, allow_redirects=True)
+                if resp.status_code == 200:
+                    return True, None
+                return False, f"/identity returned HTTP {resp.status_code}: {resp.text[:200]}"
+            except requests.exceptions.RequestException as e:
+                return False, f"root failed: {root_err}; /identity failed: {e}"
+
         except Exception as e:
             return False, str(e)
 
